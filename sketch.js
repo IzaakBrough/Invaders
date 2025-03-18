@@ -7,19 +7,20 @@ const scoreElement = document.getElementById('score');
 const livesElement = document.getElementById('lives');
 const bulletsElement = document.getElementById('bullets');
 const speedElement = document.getElementById('speed');
+const leaderboardScreen = document.getElementById('leaderboardScreen');
+const leaderboardList = document.getElementById('leaderboard');
+const leaderboardBackButton = document.getElementById('leaderboardBack');
+const playPauseButton = document.getElementById('playPauseButton');
+const viewLeaderboardButton = document.getElementById('viewLeaderboardButton');
 
-let player;
-let e = 2.71828;
-let aliens = [];
-let fastAliens = [];
-let bullets = [];
-let lives = 3;
-let score = 0;
-let speedMultiplier = 1;
+// Images
 let alienImage;
 let playerImage;
-let bulletCount = 50;
-// Add key state tracking
+
+// Game instance
+let game;
+
+// Key state tracking
 let keyState = {
     w: false,
     a: false,
@@ -27,100 +28,416 @@ let keyState = {
     d: false
 };
 
+// Add this code before anything else
+// This will run immediately when the script is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    debugScreenVisibility("DOM Content Loaded");
+    
+    // Force override any conflicting styles
+    gameOverScreen.style.display = "none";
+    leaderboardScreen.style.display = "none";
+    gameOverScreen.classList.add('hidden');
+    leaderboardScreen.classList.add('hidden');
+});
+
+class Game {
+    constructor() {
+        this.player = null;
+        this.aliens = [];
+        this.fastAliens = [];
+        this.bullets = [];
+        this.lives = 3;
+        this.score = 0;
+        this.speedMultiplier = 1;
+        this.bulletCount = 50;
+        this.isGameOver = false;
+        this.isPaused = true; // Start paused initially
+        
+        // Create leaderboard
+        this.leaderboard = new Leaderboard();
+        
+        // Bind methods to preserve 'this' context
+        this.reset = this.reset.bind(this);
+        this.gameOver = this.gameOver.bind(this);
+    }
+    
+    setup() {
+        debugScreenVisibility("Game Setup");
+        
+        // Force hide screens with both class and style
+        gameOverScreen.classList.add('hidden');
+        leaderboardScreen.classList.add('hidden');
+        gameOverScreen.style.display = "none";
+        leaderboardScreen.style.display = "none";
+        
+        // Create player
+        this.reset();
+        
+        // Setup game intervals
+        this.spawnAliensInterval = setInterval(() => this.spawnAliens(), 5000);
+        this.spawnFastAliensInterval = setInterval(() => this.spawnFastAliens(), 10000);
+        this.increaseSpeedInterval = setInterval(() => this.increaseSpeed(), 10000);
+        this.addBulletInterval = setInterval(() => this.addBullet(), 1000);
+        
+        // Setup event listeners
+        this.setupEventListeners();
+        
+        // Start in paused state
+        this.setPaused(true);
+        playPauseButton.textContent = "Play";
+        noLoop();
+    }
+    
+    setupEventListeners() {
+        // Reset button
+        retryButtonElement.onclick = this.reset;
+        
+        // Leaderboard button
+        leaderboardButtonElement.onclick = () => {
+            const playerName = prompt("Enter your name for the leaderboard:", "Player");
+            if (playerName) {
+                this.leaderboard.addScore(playerName, this.score);
+                this.leaderboard.displayLeaderboard();
+                gameOverScreen.classList.add('hidden');
+                leaderboardScreen.classList.remove('hidden');
+            }
+        };
+        
+        // Play/Pause button
+        playPauseButton.onclick = () => {
+            this.togglePause();
+        };
+        
+        // View Leaderboard button
+        viewLeaderboardButton.onclick = () => {
+            // Only show leaderboard if game is paused
+            this.setPaused(true);
+            this.leaderboard.displayLeaderboard();
+            gameOverScreen.classList.add('hidden');
+            leaderboardScreen.classList.remove('hidden');
+            leaderboardScreen.style.display = "flex";
+        };
+        
+        // Back button
+        leaderboardBackButton.addEventListener('click', () => {
+            leaderboardScreen.classList.add('hidden');
+            leaderboardScreen.style.display = "none";
+            // Don't automatically reset, just go back to paused/playing game
+            if (!this.isGameOver) {
+                // Resume the game if it wasn't game over
+                this.setPaused(false);
+            } else {
+                // If it was game over, start a new game
+                this.reset();
+            }
+        });
+    }
+    
+    // Add new methods to handle pause state
+    togglePause() {
+        this.isPaused = !this.isPaused;
+        playPauseButton.textContent = this.isPaused ? "Play" : "Pause";
+        
+        if (this.isPaused) {
+            noLoop();
+        } else {
+            loop();
+        }
+    }
+    
+    setPaused(value) {
+        this.isPaused = value;
+        playPauseButton.textContent = this.isPaused ? "Play" : "Pause";
+        
+        if (this.isPaused) {
+            noLoop();
+        } else {
+            loop();
+        }
+    }
+    
+    reset() {
+        debugScreenVisibility("Game Reset");
+        
+        this.player = new Player();
+        this.aliens = [];
+        this.fastAliens = [];
+        this.bullets = [];
+        this.lives = 3;
+        this.score = 0;
+        this.speedMultiplier = 1;
+        this.bulletCount = 50;
+        this.isGameOver = false;
+        this.isPaused = true; // Start paused on reset too
+        playPauseButton.textContent = "Play";
+        
+        this.spawnAliens();
+        this.spawnFastAliens();
+        
+        // Hide screens with both class and style
+        gameOverScreen.classList.add('hidden');
+        leaderboardScreen.classList.add('hidden');
+        gameOverScreen.style.display = "none";
+        leaderboardScreen.style.display = "none";
+        
+        // Stop the game loop since we're starting paused
+        noLoop();
+    }
+    
+    update() {
+        // Don't update if game is over
+        if (this.isGameOver) return;
+        
+        this.updateGameUI();
+        this.player.show();
+        this.player.move();
+        
+        // Update bullets
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+            this.bullets[i].show();
+            this.bullets[i].move();
+            
+            // Remove bullets that go off screen
+            if (this.bullets[i].y < 0) {
+                this.bullets.splice(i, 1);
+            }
+        }
+        
+        // Update aliens
+        for (let alien of this.aliens) {
+            alien.show();
+            alien.move();
+        }
+        
+        for (let fastAlien of this.fastAliens) {
+            fastAlien.show();
+            fastAlien.move();
+        }
+        
+        this.checkCollisions();
+        this.checkPlayerHit();
+    }
+    
+    updateGameUI() {
+        scoreElement.innerHTML = `Score: ${this.score}`;
+        livesElement.innerHTML = `Lives: ${this.lives}`;
+        bulletsElement.innerHTML = `Bullets: ${this.bulletCount}`;
+        speedElement.innerHTML = `Speed: ${this.speedMultiplier.toFixed(2)}x`;
+    }
+    
+    spawnAliens() {
+        for (let i = 0; i < 5; i++) {
+            this.aliens.push(new Alien(i * 80 + 80, 60, this.speedMultiplier));
+        }
+    }
+    
+    spawnFastAliens() {
+        for (let i = 0; i < 5; i++) {
+            this.fastAliens.push(new FastAlien(i * 80 + 80, 120, this.speedMultiplier));
+        }
+    }
+    
+    increaseSpeed() {
+        this.speedMultiplier *= 2;
+    }
+    
+    addBullet() {
+        this.bulletCount++;
+    }
+    
+    fireBullet() {
+        if (this.bulletCount > 0) {
+            this.bullets.push(new Bullet(this.player.x + 30, this.player.y));
+            this.bulletCount--;
+        }
+    }
+    
+    updatePlayerDirection(xdir, ydir) {
+        this.player.setDir(xdir, ydir);
+    }
+    
+    checkCollisions() {
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+            for (let j = this.aliens.length - 1; j >= 0; j--) {
+                if (this.bullets[i] && this.bullets[i].hits(this.aliens[j])) {
+                    this.score += 10;
+                    this.aliens.splice(j, 1);
+                    this.bullets.splice(i, 1);
+                    break;
+                }
+            }
+            
+            if (!this.bullets[i]) continue; // Bullet was removed in the previous loop
+            
+            for (let k = this.fastAliens.length - 1; k >= 0; k--) {
+                if (this.bullets[i] && this.bullets[i].hits(this.fastAliens[k])) {
+                    this.score += 20;
+                    this.fastAliens.splice(k, 1);
+                    this.bullets.splice(i, 1);
+                    break;
+                }
+            }
+        }
+    }
+    
+    checkPlayerHit() {
+        for (let i = this.aliens.length - 1; i >= 0; i--) {
+            if (this.aliens[i].hits(this.player)) {
+                this.lives -= 1;
+                this.aliens.splice(i, 1);
+                console.log("Player hit! Lives:", this.lives);
+                if (this.lives <= 0) {
+                    console.log("Player died! Game over!");
+                    this.gameOver();
+                }
+            }
+        }
+        
+        for (let i = this.fastAliens.length - 1; i >= 0; i--) {
+            if (this.fastAliens[i].hits(this.player)) {
+                this.lives -= 1;
+                this.fastAliens.splice(i, 1);
+                console.log("Player hit by fast alien! Lives:", this.lives);
+                if (this.lives <= 0) {
+                    console.log("Player died! Game over!");
+                    this.gameOver();
+                }
+            }
+        }
+    }
+    
+    gameOver() {
+        debugScreenVisibility("Game Over Called");
+        
+        this.isGameOver = true;
+        this.isPaused = true; // Consider game paused when it's over
+        playPauseButton.textContent = "Play"; // Update button text
+        noLoop();
+        
+        // Update final score
+        finalScoreElement.textContent = `Your final score: ${this.score}`;
+        
+        // Show game over screen - use both class and style
+        gameOverScreen.classList.remove('hidden');
+        gameOverScreen.style.display = "flex";
+        
+        // Double check after a slight delay to ensure it's visible
+        setTimeout(() => {
+            debugScreenVisibility("Game Over - After Timeout");
+            if (gameOverScreen.classList.contains('hidden')) {
+                console.log("Forcing game over screen visible again");
+                gameOverScreen.classList.remove('hidden');
+                gameOverScreen.style.display = "flex";
+            }
+        }, 100);
+    }
+}
+
+class Leaderboard {
+    constructor() {
+        // Load existing scores from localStorage
+        const savedScores = localStorage.getItem('spaceInvadersScores');
+        this.scores = savedScores ? JSON.parse(savedScores) : [];
+    }
+    
+    addScore(name, score) {
+        this.scores.push({name, score, date: new Date().toLocaleDateString()});
+        this.scores.sort((a, b) => b.score - a.score);
+        // Keep only top 10 scores
+        this.scores = this.scores.slice(0, 10);
+        // Save to localStorage
+        localStorage.setItem('spaceInvadersScores', JSON.stringify(this.scores));
+    }
+    
+    getTopScores(count = 10) {
+        return this.scores.slice(0, count);
+    }
+    
+    displayLeaderboard() {
+        // Clear current list
+        leaderboardList.innerHTML = '';
+        
+        // Get top scores
+        const topScores = this.getTopScores();
+        
+        if (topScores.length === 0) {
+            const emptyItem = document.createElement('li');
+            emptyItem.textContent = 'No scores yet. Be the first!';
+            leaderboardList.appendChild(emptyItem);
+            return;
+        }
+        
+        // Add scores to leaderboard
+        topScores.forEach((scoreData, index) => {
+            const scoreItem = document.createElement('li');
+            scoreItem.innerHTML = `<span class="rank">#${index + 1}</span> <span class="name">${scoreData.name}</span> <span class="score">${scoreData.score}</span> <span class="date">${scoreData.date}</span>`;
+            leaderboardList.appendChild(scoreItem);
+        });
+    }
+}
+
 function preload() {
     alienImage = loadImage('./alien.png');
     playerImage = loadImage('./player.png');
 }
 
 function setup() {
-    let canvas = createCanvas(900, 600);
+    debugScreenVisibility("Setup Function");
+    
+    // Immediately hide both screens
+    gameOverScreen.classList.add('hidden');
+    leaderboardScreen.classList.add('hidden');
+    gameOverScreen.style.display = "none";
+    leaderboardScreen.style.display = "none";
+    
+    // Create responsive canvas based on container size
+    const gameContainer = document.getElementById('gameCanvas');
+    const containerWidth = gameContainer.offsetWidth;
+    const canvasHeight = Math.min(600, window.innerHeight * 0.7);
+    
+    let canvas = createCanvas(containerWidth, canvasHeight);
     canvas.parent('gameCanvas');
-    resetGame();
-    setInterval(spawnAliens, 5000);
-    setInterval(spawnFastAliens, 10000);
-    setInterval(increaseSpeed, 10000); // Increase speed every 10 seconds
-    setInterval(addBullet, 1000); // Add a bullet every second
+    
+    // Create and setup the game
+    game = new Game();
+    game.setup();
+    
+    // Make sure the game starts paused
+    noLoop();
+    
+    // Setup window resize handler
+    window.addEventListener('resize', windowResized);
+}
+
+function windowResized() {
+    // Resize canvas when window size changes
+    const gameContainer = document.getElementById('gameCanvas');
+    const containerWidth = gameContainer.offsetWidth;
+    const canvasHeight = Math.min(600, window.innerHeight * 0.7);
+    
+    resizeCanvas(containerWidth, canvasHeight);
+    
+    // If we have a player, make sure it stays in bounds
+    if (game && game.player) {
+        game.player.x = constrain(game.player.x, 0, width - 60);
+        game.player.y = constrain(game.player.y, 0, height - 60);
+    }
 }
 
 function draw() {
     background(173, 216, 230);
-    updateGameUI(); // Replace displayScore with updateGameUI
-    player.show();
-    player.move();
-
-    for (let bullet of bullets) {
-        bullet.show();
-        bullet.move();
-    }
-
-    for (let alien of aliens) {
-        alien.show();
-        alien.move();
-    }
-
-    for (let fastAlien of fastAliens) {
-        fastAlien.show();
-        fastAlien.move();
-    }
-
-    checkCollisions();
-    checkPlayerHit();
+    game.update();
 }
-
-function resetGame() {
-    player = new Player();
-    aliens = [];
-    fastAliens = [];
-    bullets = [];
-    lives = 3;
-    bulletCount = 50;
-    speedMultiplier = 1;
-    spawnAliens();
-    spawnFastAliens();
-    loop();
-    
-    // Hide the game over screen
-    gameOverScreen.classList.add('hidden');
-}
-
-function spawnAliens() {
-    for (let i = 0; i < 5; i++) {
-        aliens.push(new Alien(i * 80 + 80, 60));
-    }
-}
-
-function spawnFastAliens() {
-    for (let i = 0; i < 5; i++) {
-        fastAliens.push(new FastAlien(i * 80 + 80, 120));
-    }
-}
-
-function increaseSpeed() {
-    speedMultiplier *= 2; // Increase speed multiplier by 100% every 10 seconds
-}
-
-// Replace the displayScore function with updateGameUI
-function updateGameUI() {
-    scoreElement.innerHTML = `Score: ${score}`;
-    livesElement.innerHTML = `Lives: ${lives}`;
-    bulletsElement.innerHTML = `Bullets: ${bulletCount}`;
-    speedElement.innerHTML = `Speed: ${speedMultiplier.toFixed(2)}x`;
-}
-
-// Remove or comment out the old displayScore function
-// function displayScore() {
-//     fill(255);
-//     textSize(24);
-//     text(`Score: ${score}`, 10, 30);
-//     text(`Lives: ${lives}`, 10, 60);
-//     text(`Bullets: ${bulletCount}`, 10, 90);
-//     text(`Speed Multiplier: ${speedMultiplier.toFixed(2)}`, 10, 120);
-// }
 
 function keyPressed() {
-    if (key === ' ' && bulletCount > 0) {
-        bullets.push(new Bullet(player.x + 30, player.y));
-        bulletCount--;
+    // Add Escape key for pausing/unpausing
+    if (keyCode === ESCAPE) {
+        game.togglePause();
+        return false; // Prevent default browser behavior
+    }
+    
+    if (key === ' ') {
+        game.fireBullet();
     }
     
     // Update key state
@@ -142,98 +459,21 @@ function keyReleased() {
     updatePlayerDirection();
 }
 
-// New function to update player direction based on current key state
 function updatePlayerDirection() {
-    // Calculate x direction: -1 for left, 1 for right, 0 for neither or both
+    // Calculate x direction
     let xdir = 0;
     if (keyState.a) xdir -= 1;
     if (keyState.d) xdir += 1;
     
-    // Calculate y direction: -1 for up, 1 for down, 0 for neither or both
+    // Calculate y direction
     let ydir = 0;
     if (keyState.w) ydir -= 1;
     if (keyState.s) ydir += 1;
     
     // Update player direction
-    player.setDir(xdir, ydir);
-}
-
-function checkCollisions() {
-    for (let i = bullets.length - 1; i >= 0; i--) {
-        for (let j = aliens.length - 1; j >= 0; j--) {
-            if (bullets[i] && bullets[i].hits(aliens[j])) {
-                score += 10;
-                aliens.splice(j, 1);
-                bullets.splice(i, 1);
-                break;
-            }
-        }
-        for (let k = fastAliens.length - 1; k >= 0; k--) {
-            if (bullets[i] && bullets[i].hits(fastAliens[k])) {
-                score += 20;
-                fastAliens.splice(k, 1);
-                bullets.splice(i, 1);
-                break;
-            }
-        }
+    if (game && game.player) {
+        game.updatePlayerDirection(xdir, ydir);
     }
-}
-
-function checkPlayerHit() {
-    for (let i = aliens.length - 1; i >= 0; i--) {
-        if (aliens[i] instanceof Alien && aliens[i].hits(player)) {
-            lives -= 1;
-            aliens.splice(i, 1);
-            if (lives <= 0) {
-                gameOver();
-            }
-        }
-    }
-    for (let i = fastAliens.length - 1; i >= 0; i--) {
-        if (fastAliens[i] instanceof FastAlien && fastAliens[i].hits(player)) {
-            lives -= 1;
-            fastAliens.splice(i, 1);
-            if (lives <= 0) {
-                gameOver();
-            }
-        }
-    }
-}
-
-function gameOver() {
-    noLoop();
-    
-    // Update final score
-    finalScoreElement.textContent = `Your final score: ${score}`;
-    
-    // Show game over screen
-    gameOverScreen.classList.remove('hidden');
-    
-    // Setup event handlers (only need to do this once in setup, but doing it again won't hurt)
-    retryButtonElement.onclick = function() {
-        lives = 3;
-        score = 0;
-        resetGame();
-    };
-    
-    leaderboardButtonElement.onclick = function() {
-        // Implement leaderboard functionality here
-        console.log("Leaderboard button clicked");
-    };
-}
-
-// Delete or comment out the drawGameOverBox function as it's no longer needed
-// function drawGameOverBox() {
-//     fill(255, 0, 0);
-//     rect(width / 2 - 100, height / 2 - 50, 200, 150, 20);
-//     fill(255);
-//     textSize(32);
-//     textAlign(CENTER, CENTER);
-//     text("Game Over", width / 2, height / 2 - 20);
-// }
-
-function addBullet() {
-    bulletCount++;
 }
 
 class Player {
@@ -296,7 +536,7 @@ class Bullet {
 }
 
 class Alien {
-    constructor(x, y) {
+    constructor(x, y, speedMultiplier) {
         this.x = x;
         this.y = y;
         this.r = 30;
@@ -322,9 +562,16 @@ class Alien {
 }
 
 class FastAlien extends Alien {
-    constructor(x, y) {
-        super(x, y);
+    constructor(x, y, speedMultiplier) {
+        super(x, y, speedMultiplier);
         this.xdir = 5 * speedMultiplier;
         this.ydir = 1 * speedMultiplier;
     }
+}
+
+// Add this function to help with debugging screen visibility
+function debugScreenVisibility(message) {
+    console.log(message);
+    console.log("Game Over Screen hidden?", gameOverScreen.classList.contains('hidden'));
+    console.log("Leaderboard Screen hidden?", leaderboardScreen.classList.contains('hidden'));
 }

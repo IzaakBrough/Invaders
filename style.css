@@ -1,13 +1,22 @@
+/* Base styles with improved cross-browser compatibility */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
 body {
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
+  min-height: 100vh;
   background-color: #140;
   color: #fff;
-  font-family: 'Press Start 2P', cursive;
+  font-family: 'Press Start 2P', cursive, sans-serif;
   margin: 0;
   overflow: hidden; /* Prevent scrolling */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .game-container {
@@ -15,38 +24,82 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  max-height: 100vh;
+  align-items: center;
+  width: 100%;
+  max-width: 1000px;
+  padding: 1rem;
+  margin: 0 auto;
 }
 
 h1 {
-  margin: 5px 0;
+  margin: 0.5rem 0;
   font-size: 1.5em;
 }
 
 p {
-  margin: 5px 0;
+  margin: 0.5rem 0;
   font-size: 0.8em;
 }
 
+/* Game UI styling */
 #gameUI {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-around;
-  margin: 10px 0;
-  padding: 5px;
+  width: 100%;
+  margin: 0.5rem 0;
+  padding: 0.5rem;
   background-color: rgba(0, 0, 0, 0.3);
   border-radius: 5px;
 }
 
 #gameUI p {
-  margin: 0 10px;
+  margin: 0.3rem;
+  font-size: 0.7em;
 }
 
 #gameCanvas {
-  margin: 0;
+  width: 100%;
+  max-width: 900px;
+  height: auto;
+  margin: 0 auto;
 }
 
+/* Game menu styling */
+.game-menu {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 0.5rem 0;
+  gap: 1rem;
+  width: 100%;
+}
+
+.menu-button {
+  background-color: #4CAF50;
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  text-align: center;
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-family: 'Press Start 2P', cursive, sans-serif;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.menu-button:hover {
+  background-color: #45a049;
+}
+
+.menu-button:active {
+  background-color: #398e3d;
+}
+
+/* Game over screen */
 .game-over-screen {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
     width: 100%;
@@ -60,33 +113,260 @@ p {
 
 .game-over-content {
     background-color: #f44336;
-    padding: 40px;
-    border-radius: 20px;
+    padding: 2rem;
+    border-radius: 1.25rem;
     text-align: center;
     color: white;
+    width: 90%;
+    max-width: 400px;
 }
 
 .game-over-content h2 {
-    font-size: 32px;
-    margin-bottom: 20px;
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
 }
 
 .game-over-content button {
     background-color: white;
     border: none;
     color: #f44336;
-    padding: 12px 24px;
-    margin: 10px;
+    padding: 0.75rem 1.5rem;
+    margin: 0.6rem;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 16px;
+    font-size: 0.9rem;
     font-weight: bold;
+    font-family: inherit;
 }
 
 .game-over-content button:hover {
     background-color: #eee;
 }
 
+/* Leaderboard screen */
+.leaderboard-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 10;
+    padding: 1rem;
+}
+
+.leaderboard-screen h2 {
+    color: #ffcc00;
+    margin-bottom: 1.5rem;
+    font-size: 1.5rem;
+    text-shadow: 2px 2px 0 #000;
+}
+
+.leaderboard-screen ol {
+    list-style-position: inside;
+    padding: 0;
+    width: 100%;
+    max-width: 600px;
+    margin-bottom: 1.5rem;
+    overflow-y: auto;
+    max-height: 60vh;
+}
+
+.leaderboard-screen ol li {
+    background-color: rgba(255, 255, 255, 0.1);
+    margin: 0.5rem 0;
+    padding: 0.75rem;
+    border-radius: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.leaderboard-screen ol li:nth-child(1) {
+    background-color: rgba(255, 215, 0, 0.3);
+}
+
+.leaderboard-screen ol li:nth-child(2) {
+    background-color: rgba(192, 192, 192, 0.3);
+}
+
+.leaderboard-screen ol li:nth-child(3) {
+    background-color: rgba(205, 127, 50, 0.3);
+}
+
+.leaderboard-screen ol li .rank {
+    width: 2.5rem;
+    min-width: 2.5rem;
+}
+
+.leaderboard-screen ol li .name {
+    flex-grow: 1;
+    text-align: left;
+    padding: 0 1.25rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leaderboard-screen ol li .score {
+    font-weight: bold;
+    color: #ffcc00;
+    padding-right: 1.25rem;
+}
+
+.leaderboard-screen ol li .date {
+    font-size: 0.7em;
+    opacity: 0.7;
+}
+
+.leaderboard-screen button {
+    background-color: #ffcc00;
+    border: none;
+    color: #000;
+    padding: 0.75rem 1.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: bold;
+    font-family: 'Press Start 2P', cursive, sans-serif;
+}
+
+.leaderboard-screen button:hover {
+    background-color: #ffdd55;
+}
+
+/* Helper classes */
 .hidden {
-    display: none;
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+.game-over-screen:not(.hidden) {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
+.leaderboard-screen:not(.hidden) {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
+/* Media queries for responsive design */
+@media screen and (max-width: 768px) {
+    h1 {
+        font-size: 1.2rem;
+    }
+    
+    p {
+        font-size: 0.7rem;
+    }
+    
+    #gameUI p {
+        font-size: 0.6rem;
+        margin: 0.2rem;
+    }
+    
+    .menu-button {
+        font-size: 0.7rem;
+        padding: 0.4rem 0.8rem;
+    }
+    
+    .game-over-content {
+        padding: 1.5rem;
+    }
+    
+    .game-over-content h2 {
+        font-size: 1.2rem;
+    }
+    
+    .game-over-content button {
+        padding: 0.6rem 1.2rem;
+        font-size: 0.8rem;
+    }
+    
+    .leaderboard-screen h2 {
+        font-size: 1.2rem;
+    }
+    
+    .leaderboard-screen ol li {
+        padding: 0.6rem;
+    }
+    
+    .leaderboard-screen button {
+        padding: 0.6rem 1.2rem;
+        font-size: 0.8rem;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    h1 {
+        font-size: 1rem;
+    }
+    
+    p {
+        font-size: 0.6rem;
+    }
+    
+    #gameUI {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    #gameUI p {
+        margin: 0.15rem;
+        font-size: 0.55rem;
+    }
+    
+    .menu-button {
+        font-size: 0.6rem;
+        padding: 0.3rem 0.6rem;
+    }
+    
+    .game-over-content {
+        padding: 1rem;
+        width: 95%;
+    }
+    
+    .game-over-content h2 {
+        font-size: 1rem;
+    }
+    
+    .game-over-content button {
+        padding: 0.5rem 1rem;
+        font-size: 0.7rem;
+        margin: 0.4rem 0.2rem;
+    }
+    
+    .leaderboard-screen h2 {
+        font-size: 1rem;
+    }
+    
+    .leaderboard-screen ol li {
+        padding: 0.5rem;
+        font-size: 0.6rem;
+    }
+    
+    .leaderboard-screen button {
+        padding: 0.5rem 1rem;
+        font-size: 0.7rem;
+    }
+}
+
+/* Cross-browser compatibility */
+@supports (-webkit-touch-callout: none) {
+    /* CSS for iOS devices */
+    body {
+        height: -webkit-fill-available;
+    }
 }

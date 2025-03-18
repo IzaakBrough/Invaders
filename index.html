@@ -5,11 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Space Invaders Redux</title>
     <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="game-container">
         <h1>Space Invaders Redux</h1>
         <p>Use WASD keys to move and the space bar to shoot.</p>
+
+        <!-- Add menu bar here -->
+        <div id="gameMenu" class="game-menu">
+            <button id="playPauseButton" class="menu-button">Pause</button>
+            <button id="viewLeaderboardButton" class="menu-button">Leaderboard</button>
+        </div>
 
         <div id="gameUI" class="game-ui">
           <p id="score">Score: 0</p>
@@ -30,8 +37,9 @@
         </div>
 
         <div id="leaderboardScreen" class="leaderboard-screen hidden">
-            <h2>Leaderboard</h2>
+            <h2>Top Scores</h2>
             <ol id="leaderboard"></ol>
+            <button id="leaderboardBack">Back to Game</button>
         </div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
