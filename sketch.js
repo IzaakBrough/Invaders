@@ -13,6 +13,9 @@ const leaderboardBackButton = document.getElementById('leaderboardBack');
 const playPauseButton = document.getElementById('playPauseButton');
 const viewLeaderboardButton = document.getElementById('viewLeaderboardButton');
 
+// Add these constants at the top with the other DOM elements
+const instructionsElement = document.querySelector('.game-container > p');
+
 // Images
 let alienImage;
 let playerImage;
@@ -20,13 +23,7 @@ let playerImage;
 // Game instance
 let game;
 
-// Key state tracking
-let keyState = {
-    w: false,
-    a: false,
-    s: false,
-    d: false
-};
+// Remove the global keyState object as it will be moved to the Controls class
 
 // Add this code before anything else
 // This will run immediately when the script is loaded
@@ -40,18 +37,131 @@ document.addEventListener('DOMContentLoaded', function() {
     leaderboardScreen.classList.add('hidden');
 });
 
+// Add new Controls class
+class Controls {
+    constructor(game) {
+        this.game = game;
+        this.keyState = {
+            w: false,
+            a: false,
+            s: false,
+            d: false
+        };
+        
+        // Set up event listeners
+        this.setupEventListeners();
+    }
+    
+    setupEventListeners() {
+        // Remove existing event listeners if they exist to prevent duplicates
+        window.removeEventListener('keydown', this._handleKeyDown);
+        window.removeEventListener('keyup', this._handleKeyUp);
+        
+        // Store bound methods for potential future removal
+        this._handleKeyDown = this.handleKeyDown.bind(this);
+        this._handleKeyUp = this.handleKeyUp.bind(this);
+        
+        // Add event listeners with stored bound methods
+        window.addEventListener('keydown', this._handleKeyDown);
+        window.addEventListener('keyup', this._handleKeyUp);
+        
+        // Debug output
+        console.log("Controls: Event listeners set up");
+    }
+    
+    handleKeyDown(event) {
+        const key = event.key.toLowerCase();
+        
+        // Debug the key press
+        console.log(`Key pressed: ${key}`);
+        
+        // Handle Escape key for pausing/unpausing - with improved handling
+        if (key === 'escape') {
+            console.log("Escape key detected, game over state:", this.game.isGameOver);
+            
+            // Only toggle pause if game is not over
+            if (!this.game.isGameOver) {
+                console.log("Toggling pause. Current state:", this.game.isPaused);
+                // Force immediate pause/unpause with explicit state changes
+                if (this.game.isPaused) {
+                    this.game.setPaused(false);
+                } else {
+                    this.game.setPaused(true);
+                }
+            }
+            // Prevent default action & event bubbling
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+        }
+        
+        // Handle space key for firing (only if game is not paused)
+        if (key === ' ' && !this.game.isPaused && !this.game.isGameOver) {
+            this.game.fireBullet();
+            event.preventDefault();
+            return;
+        }
+        
+        // Update key state (only if game is running)
+        if ((key === 'a' || key === 'w' || key === 's' || key === 'd')) {
+            this.keyState[key] = true;
+            
+            // Only update player direction if the game is active
+            if (!this.game.isPaused && !this.game.isGameOver) {
+                this.updatePlayerDirection();
+            }
+        }
+    }
+    
+    handleKeyUp(event) {
+        const key = event.key.toLowerCase();
+        
+        // Update key state when keys are released
+        if (key === 'a' || key === 'w' || key === 's' || key === 'd') {
+            this.keyState[key] = false;
+            this.updatePlayerDirection();
+        }
+    }
+    
+    updatePlayerDirection() {
+        // Calculate x direction
+        let xdir = 0;
+        if (this.keyState.a) xdir -= 1;
+        if (this.keyState.d) xdir += 1;
+        
+        // Calculate y direction
+        let ydir = 0;
+        if (this.keyState.w) ydir -= 1;
+        if (this.keyState.s) ydir += 1;
+        
+        // Update player direction
+        if (this.game && this.game.player) {
+            this.game.updatePlayerDirection(xdir, ydir);
+        }
+    }
+}
+
 class Game {
     constructor() {
         this.player = null;
         this.aliens = [];
         this.fastAliens = [];
+        this.shooterAliens = []; // Add shooter aliens array
         this.bullets = [];
+        this.enemyBullets = []; // Add enemy bullets array
+        this.bulletBox = null; // Single bullet box instead of an array
         this.lives = 3;
         this.score = 0;
         this.speedMultiplier = 1;
-        this.bulletCount = 50;
+        this.bulletCount = 10;
         this.isGameOver = false;
         this.isPaused = true; // Start paused initially
+        this.lastShotTime = 0; // Track player's last shot time
+        this.playerCooldown = 300; // Cooldown in milliseconds (300ms = 0.3 seconds)
+        
+        // New properties for alien management
+        this.maxAliensOnScreen = 10; // Maximum total aliens allowed on screen
+        this.shooterProbability = 0.1; // Initial 10% chance for a new alien to be a shooter
         
         // Create leaderboard
         this.leaderboard = new Leaderboard();
@@ -59,6 +169,19 @@ class Game {
         // Bind methods to preserve 'this' context
         this.reset = this.reset.bind(this);
         this.gameOver = this.gameOver.bind(this);
+        
+        // Add bullet pools
+        this.bulletPool = [];
+        this.enemyBulletPool = [];
+        this.maxBullets = 50;
+        this.maxEnemyBullets = 30;
+        
+        // Add bullet batch processing
+        this.bulletUpdateInterval = 2; // Update every 2 frames
+        this.currentFrame = 0;
+        
+        // Add controls property
+        this.controls = null;
     }
     
     setup() {
@@ -73,18 +196,20 @@ class Game {
         // Create player
         this.reset();
         
-        // Setup game intervals
-        this.spawnAliensInterval = setInterval(() => this.spawnAliens(), 5000);
-        this.spawnFastAliensInterval = setInterval(() => this.spawnFastAliens(), 10000);
-        this.increaseSpeedInterval = setInterval(() => this.increaseSpeed(), 10000);
-        this.addBulletInterval = setInterval(() => this.addBullet(), 1000);
+        // Setup game intervals - use fewer intervals and longer times
+        this.spawnAliensInterval = setInterval(() => this.spawnAliens(), 8000); // Slower spawn rate
+        this.increaseSpeedInterval = setInterval(() => this.increaseSpeed(), 15000); // Slower speed increase
+        this.addBulletInterval = setInterval(() => this.addBullet(), 2000); // Slower bullet regen
+        this.spawnBulletBoxInterval = setInterval(() => this.spawnBulletBox(), 10000); // Slower box spawn
         
         // Setup event listeners
         this.setupEventListeners();
         
+        // Initialize controls
+        this.controls = new Controls(this);
+        
         // Start in paused state
         this.setPaused(true);
-        playPauseButton.textContent = "Play";
         noLoop();
     }
     
@@ -135,44 +260,115 @@ class Game {
     
     // Add new methods to handle pause state
     togglePause() {
-        this.isPaused = !this.isPaused;
-        playPauseButton.textContent = this.isPaused ? "Play" : "Pause";
-        
-        if (this.isPaused) {
-            noLoop();
-        } else {
-            loop();
+        if (this.isGameOver) {
+            console.log("Toggle pause ignored - game is over");
+            return;
         }
+        
+        console.log(`Toggling pause from ${this.isPaused} to ${!this.isPaused}`);
+        this.setPaused(!this.isPaused);
     }
     
     setPaused(value) {
-        this.isPaused = value;
-        playPauseButton.textContent = this.isPaused ? "Play" : "Pause";
+        // Force convert to boolean to handle any unexpected input
+        const shouldPause = Boolean(value);
+        
+        // Debug output
+        console.log(`SetPaused called with: ${shouldPause}, current state: ${this.isPaused}`);
+        
+        // Check if the state is actually changing
+        if (this.isPaused === shouldPause) {
+            console.log("Pause state unchanged");
+            return;
+        }
+        
+        this.isPaused = shouldPause;
         
         if (this.isPaused) {
+            // Pause the game
+            playPauseButton.textContent = "Play";
+            playPauseButton.classList.remove('pause-button');
+            playPauseButton.classList.add('play-button');
+            
+            // Stop the game loop
+            console.log("Calling noLoop() to pause game");
             noLoop();
+            
+            // Force update UI
+            this.updateGameUI();
+            
+            // Debug message
+            console.log("Game paused by setPaused");
         } else {
+            // Unpause the game
+            playPauseButton.textContent = "Pause";
+            playPauseButton.classList.remove('play-button');
+            playPauseButton.classList.add('pause-button');
+            
+            // Resume the game loop
+            console.log("Calling loop() to resume game");
             loop();
+            
+            // Force update UI
+            this.updateGameUI();
+            
+            // Debug message
+            console.log("Game resumed by setPaused");
         }
     }
     
     reset() {
         debugScreenVisibility("Game Reset");
+
+        // Clear existing intervals to avoid duplicates
+        if (this.spawnBulletBoxInterval) {
+            clearInterval(this.spawnBulletBoxInterval);
+        }
+        if (this.spawnAliensInterval) {
+            clearInterval(this.spawnAliensInterval);
+        }
+        if (this.increaseSpeedInterval) {
+            clearInterval(this.increaseSpeedInterval);
+        }
+        if (this.addBulletInterval) {
+            clearInterval(this.addBulletInterval);
+        }
         
         this.player = new Player();
         this.aliens = [];
         this.fastAliens = [];
+        this.shooterAliens = [];
         this.bullets = [];
+        this.enemyBullets = [];
+        this.bulletBox = null; // Reset to null
         this.lives = 3;
         this.score = 0;
         this.speedMultiplier = 1;
-        this.bulletCount = 50;
+        this.bulletCount = 10;
         this.isGameOver = false;
         this.isPaused = true; // Start paused on reset too
+        this.lastShotTime = 0;
+        this.shooterProbability = 0.1; // Reset shooter probability
+        this.maxAliensOnScreen = 10; // Reset max aliens
+        
+        playPauseButton.classList.remove('pause-button');
+        playPauseButton.classList.add('play-button');
         playPauseButton.textContent = "Play";
         
-        this.spawnAliens();
-        this.spawnFastAliens();
+        // Setup game intervals again - with optimized timing
+        this.spawnAliensInterval = setInterval(() => this.spawnAliens(), 8000);
+        this.increaseSpeedInterval = setInterval(() => this.increaseSpeed(), 15000);
+        this.addBulletInterval = setInterval(() => this.addBullet(), 8000);
+        this.spawnBulletBoxInterval = setInterval(() => {
+            console.log("Attempting to spawn bullet box"); // Debug output
+            this.spawnBulletBox();
+        }, 10000);
+        
+        // Add initial aliens (fewer)
+        this.spawnAliens(2); // Start with just 2 aliens
+        
+        // Create initial bullet box
+        this.spawnBulletBox();
         
         // Hide screens with both class and style
         gameOverScreen.classList.add('hidden');
@@ -182,24 +378,61 @@ class Game {
         
         // Stop the game loop since we're starting paused
         noLoop();
+        
+        // Reinitialize controls if needed
+        if (!this.controls) {
+            this.controls = new Controls(this);
+        }
     }
     
     update() {
         // Don't update if game is over
         if (this.isGameOver) return;
         
+        this.currentFrame++;
+        
         this.updateGameUI();
         this.player.show();
         this.player.move();
         
-        // Update bullets
-        for (let i = this.bullets.length - 1; i >= 0; i--) {
-            this.bullets[i].show();
-            this.bullets[i].move();
+        // Process bullets in batches to improve performance
+        const isUpdateFrame = this.currentFrame % this.bulletUpdateInterval === 0;
+        
+        // Update bullets with optimized code
+        const maxBulletsToProcess = Math.min(this.bullets.length, 20); // Reduced from 30
+        for (let i = maxBulletsToProcess - 1; i >= 0; i--) {
+            const bullet = this.bullets[i];
             
-            // Remove bullets that go off screen
-            if (this.bullets[i].y < 0) {
-                this.bullets.splice(i, 1);
+            // Always show bullets for smooth visuals
+            bullet.show();
+            
+            // Only move and check boundaries on update frames
+            if (isUpdateFrame) {
+                bullet.move();
+                
+                // Remove bullets that go off screen and recycle them
+                if (bullet.y < 0) {
+                    this.recycleBullet(i);
+                }
+            }
+        }
+        
+        // Update enemy bullets with optimized code
+        const maxEnemyBulletsToProcess = Math.min(this.enemyBullets.length, 15); // Reduced from 20
+        for (let i = maxEnemyBulletsToProcess - 1; i >= 0; i--) {
+            const enemyBullet = this.enemyBullets[i];
+            
+            // Always show bullets
+            enemyBullet.show();
+            
+            // Only move and check boundaries on update frames
+            if (isUpdateFrame) {
+                enemyBullet.move();
+                
+                // Remove bullets that go off screen and recycle them
+                if (enemyBullet.y > height) {
+                    this.recycleEnemyBullet(i);
+                }
             }
         }
         
@@ -213,9 +446,29 @@ class Game {
             fastAlien.show();
             fastAlien.move();
         }
+
+        for (let shooterAlien of this.shooterAliens) {
+            shooterAlien.show();
+            shooterAlien.move();
+            
+            // Less frequent shooting but increases with game speed
+            if (random() < 0.005 * this.speedMultiplier) { // Reduced from 0.01
+                this.spawnShooterAlienBullet(shooterAlien);
+            }
+        }
+
+        // Show bullet box if it exists
+        if (this.bulletBox) {
+            this.bulletBox.show();
+        }
         
-        this.checkCollisions();
-        this.checkPlayerHit();
+        // Only perform collision detection on update frames
+        if (isUpdateFrame) {
+            this.checkCollisions();
+            this.checkPlayerHit();
+            this.checkBulletBoxCollision(); // Changed from plural to singular
+            this.checkEnemyBulletCollisions();
+        }
     }
     
     updateGameUI() {
@@ -225,20 +478,57 @@ class Game {
         speedElement.innerHTML = `Speed: ${this.speedMultiplier.toFixed(2)}x`;
     }
     
-    spawnAliens() {
-        for (let i = 0; i < 5; i++) {
-            this.aliens.push(new Alien(i * 80 + 80, 60, this.speedMultiplier));
-        }
-    }
-    
-    spawnFastAliens() {
-        for (let i = 0; i < 5; i++) {
-            this.fastAliens.push(new FastAlien(i * 80 + 80, 120, this.speedMultiplier));
+    // Modified to take count parameter with default of 3 (down from 5)
+    spawnAliens(count = 3) {
+        // Check if we're at the alien limit already
+        const totalAliens = this.aliens.length + this.fastAliens.length + this.shooterAliens.length;
+        if (totalAliens >= this.maxAliensOnScreen) return;
+        
+        // Calculate how many aliens we can safely add
+        const availableSlots = this.maxAliensOnScreen - totalAliens;
+        const aliensToAdd = Math.min(count, availableSlots);
+        
+        // Limit max shooter aliens to 3
+        const maxShooterAliens = 3;
+        const currentShooterCount = this.shooterAliens.length;
+        
+        for (let i = 0; i < aliensToAdd; i++) {
+            // Random position across the top of the screen
+            const x = random(width - 60);
+            
+            // Only allow new shooter if we're below the max
+            if (random() < this.shooterProbability && currentShooterCount < maxShooterAliens) {
+                this.shooterAliens.push(new ShooterAlien(x, 40, this.speedMultiplier));
+            } 
+            // As game progresses, chance for fast aliens increases
+            else if (random() < this.speedMultiplier / 10) {
+                this.fastAliens.push(new FastAlien(x, 60, this.speedMultiplier));
+            } 
+            // Otherwise regular alien
+            else {
+                this.aliens.push(new Alien(x, 40, this.speedMultiplier));
+            }
         }
     }
     
     increaseSpeed() {
-        this.speedMultiplier *= 2;
+        // Increase speed more gradually
+        if (this.speedMultiplier < 64) {
+            this.speedMultiplier *= 1.2; // Slower increase (1.2x instead of 1.5x)
+            
+            // Cap at exactly 64x if we exceed it
+            if (this.speedMultiplier > 64) {
+                this.speedMultiplier = 64;
+            }
+            
+            // Also increase shooter probability as game gets harder
+            this.shooterProbability = Math.min(0.7, this.shooterProbability + 0.05);
+            
+            // Also gradually increase max aliens allowed
+            if (this.maxAliensOnScreen < 20) {
+                this.maxAliensOnScreen += 1;
+            }
+        }
     }
     
     addBullet() {
@@ -246,9 +536,48 @@ class Game {
     }
     
     fireBullet() {
-        if (this.bulletCount > 0) {
-            this.bullets.push(new Bullet(this.player.x + 30, this.player.y));
+        const currentTime = millis();
+        const timeSinceLastShot = currentTime - this.lastShotTime;
+        
+        // Check cooldown and bullet count
+        if (timeSinceLastShot >= this.playerCooldown && this.bulletCount > 0) {
+            // Get a bullet from the pool or create a new one
+            let bullet;
+            if (this.bulletPool.length > 0) {
+                bullet = this.bulletPool.pop();
+                bullet.reset(this.player.x + 30, this.player.y);
+            } else {
+                bullet = new Bullet(this.player.x + 30, this.player.y);
+            }
+            
+            this.bullets.push(bullet);
             this.bulletCount--;
+            this.lastShotTime = currentTime;
+            
+            // Cap bullet array size
+            if (this.bullets.length > this.maxBullets) {
+                this.bullets.splice(0, this.bullets.length - this.maxBullets);
+            }
+        }
+    }
+
+    spawnBulletBox() {
+        // Only spawn if we don't already have a box
+        if (!this.bulletBox) {
+            // Random position along the bottom of the screen
+            const x = random(width - 40); // Account for box width
+            const y = height - 80; // Position near the bottom
+            console.log("Spawning bullet box at:", x, y); // Debug output
+            this.bulletBox = new BulletBox(x, y);
+        }
+    }
+    
+    checkBulletBoxCollision() {
+        if (this.bulletBox && this.bulletBox.hits(this.player)) {
+            // Give player 7 bullets
+            this.bulletCount += 7;
+            console.log("Bullet box collected! Bullets: " + this.bulletCount); // Debug output
+            this.bulletBox = null; // Remove the box
         }
     }
     
@@ -257,25 +586,58 @@ class Game {
     }
     
     checkCollisions() {
+        // Create a map of active bullets for quick lookup
+        const activeBullets = new Set();
+        
+        // First pass: Check only bullets that might hit something
         for (let i = this.bullets.length - 1; i >= 0; i--) {
+            const bullet = this.bullets[i];
+            let hitDetected = false;
+            
+            // Check regular aliens
             for (let j = this.aliens.length - 1; j >= 0; j--) {
-                if (this.bullets[i] && this.bullets[i].hits(this.aliens[j])) {
+                if (bullet.hits(this.aliens[j])) {
                     this.score += 10;
                     this.aliens.splice(j, 1);
-                    this.bullets.splice(i, 1);
+                    hitDetected = true;
                     break;
                 }
             }
             
-            if (!this.bullets[i]) continue; // Bullet was removed in the previous loop
+            if (hitDetected) {
+                this.recycleBullet(i);
+                continue;
+            }
             
+            // Check fast aliens
             for (let k = this.fastAliens.length - 1; k >= 0; k--) {
-                if (this.bullets[i] && this.bullets[i].hits(this.fastAliens[k])) {
+                if (bullet.hits(this.fastAliens[k])) {
                     this.score += 20;
                     this.fastAliens.splice(k, 1);
-                    this.bullets.splice(i, 1);
+                    hitDetected = true;
                     break;
                 }
+            }
+            
+            if (hitDetected) {
+                this.recycleBullet(i);
+                continue;
+            }
+            
+            // Check shooter aliens
+            for (let l = this.shooterAliens.length - 1; l >= 0; l--) {
+                if (bullet.hits(this.shooterAliens[l])) {
+                    this.score += 30;
+                    this.shooterAliens.splice(l, 1);
+                    hitDetected = true;
+                    break;
+                }
+            }
+            
+            if (hitDetected) {
+                this.recycleBullet(i);
+            } else {
+                activeBullets.add(bullet);
             }
         }
     }
@@ -306,30 +668,89 @@ class Game {
         }
     }
     
+    checkEnemyBulletCollisions() {
+        for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
+            if (this.enemyBullets[i].hits(this.player)) {
+                this.lives -= 1;
+                this.enemyBullets.splice(i, 1);
+                console.log("Player hit by enemy bullet! Lives:", this.lives);
+                if (this.lives <= 0) {
+                    console.log("Player died! Game over!");
+                    this.gameOver();
+                }
+            }
+        }
+    }
+    
     gameOver() {
         debugScreenVisibility("Game Over Called");
         
         this.isGameOver = true;
         this.isPaused = true; // Consider game paused when it's over
+        playPauseButton.classList.remove('pause-button');
+        playPauseButton.classList.add('play-button');
         playPauseButton.textContent = "Play"; // Update button text
         noLoop();
         
         // Update final score
         finalScoreElement.textContent = `Your final score: ${this.score}`;
         
-        // Show game over screen - use both class and style
+        // Force show game over screen with multiple techniques
         gameOverScreen.classList.remove('hidden');
         gameOverScreen.style.display = "flex";
+        gameOverScreen.style.visibility = "visible";
+        gameOverScreen.style.opacity = "1";
+        gameOverScreen.style.pointerEvents = "auto";
         
-        // Double check after a slight delay to ensure it's visible
-        setTimeout(() => {
-            debugScreenVisibility("Game Over - After Timeout");
-            if (gameOverScreen.classList.contains('hidden')) {
-                console.log("Forcing game over screen visible again");
+        // Clear any queued timeouts to prevent conflicts
+        if (this._gameOverTimeout) clearTimeout(this._gameOverTimeout);
+        
+        // Double check visibility after a short delay with increasing timeouts
+        this._gameOverTimeout = setTimeout(() => {
+            debugScreenVisibility("Game Over - First Timeout Check");
+            gameOverScreen.classList.remove('hidden');
+            gameOverScreen.style.display = "flex";
+            
+            // Try again after a longer delay as a fallback
+            setTimeout(() => {
+                debugScreenVisibility("Game Over - Second Timeout Check");
                 gameOverScreen.classList.remove('hidden');
                 gameOverScreen.style.display = "flex";
-            }
+                gameOverScreen.style.visibility = "visible";
+            }, 300);
         }, 100);
+    }
+    
+    // Add methods for bullet recycling and pooling
+    recycleBullet(index) {
+        const bullet = this.bullets[index];
+        this.bulletPool.push(bullet);
+        this.bullets.splice(index, 1);
+    }
+    
+    recycleEnemyBullet(index) {
+        const bullet = this.enemyBullets[index];
+        this.enemyBulletPool.push(bullet);
+        this.enemyBullets.splice(index, 1);
+    }
+    
+    // Modified shooterAlien bullet generation
+    spawnShooterAlienBullet(shooterAlien) {
+        // Get a bullet from the pool or create a new one
+        let bullet;
+        if (this.enemyBulletPool.length > 0) {
+            bullet = this.enemyBulletPool.pop();
+            bullet.reset(shooterAlien.x + 30, shooterAlien.y + 60);
+        } else {
+            bullet = new EnemyBullet(shooterAlien.x + 30, shooterAlien.y + 60);
+        }
+        
+        this.enemyBullets.push(bullet);
+        
+        // Cap enemy bullet array size
+        if (this.enemyBullets.length > this.maxEnemyBullets) {
+            this.enemyBullets.splice(0, this.enemyBullets.length - this.maxEnemyBullets);
+        }
     }
 }
 
@@ -393,6 +814,8 @@ function setup() {
     // Create responsive canvas based on container size
     const gameContainer = document.getElementById('gameCanvas');
     const containerWidth = gameContainer.offsetWidth;
+    
+    // Standard canvas height for laptop devices
     const canvasHeight = Math.min(600, window.innerHeight * 0.7);
     
     let canvas = createCanvas(containerWidth, canvasHeight);
@@ -407,6 +830,15 @@ function setup() {
     
     // Setup window resize handler
     window.addEventListener('resize', windowResized);
+    
+    // Add a backup global keypress handler for Escape key
+    window.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape' && game && !game.isGameOver) {
+            console.log("Backup escape handler triggered");
+            game.togglePause();
+            event.preventDefault();
+        }
+    });
 }
 
 function windowResized() {
@@ -426,53 +858,33 @@ function windowResized() {
 
 function draw() {
     background(173, 216, 230);
-    game.update();
-}
-
-function keyPressed() {
-    // Add Escape key for pausing/unpausing
-    if (keyCode === ESCAPE) {
-        game.togglePause();
-        return false; // Prevent default browser behavior
-    }
     
-    if (key === ' ') {
-        game.fireBullet();
-    }
-    
-    // Update key state
-    if (key === 'a' || key === 'A') keyState.a = true;
-    if (key === 'd' || key === 'D') keyState.d = true;
-    if (key === 'w' || key === 'W') keyState.w = true;
-    if (key === 's' || key === 'S') keyState.s = true;
-    
-    updatePlayerDirection();
-}
-
-function keyReleased() {
-    // Update key state when keys are released
-    if (key === 'a' || key === 'A') keyState.a = false;
-    if (key === 'd' || key === 'D') keyState.d = false;
-    if (key === 'w' || key === 'W') keyState.w = false;
-    if (key === 's' || key === 'S') keyState.s = false;
-    
-    updatePlayerDirection();
-}
-
-function updatePlayerDirection() {
-    // Calculate x direction
-    let xdir = 0;
-    if (keyState.a) xdir -= 1;
-    if (keyState.d) xdir += 1;
-    
-    // Calculate y direction
-    let ydir = 0;
-    if (keyState.w) ydir -= 1;
-    if (keyState.s) ydir += 1;
-    
-    // Update player direction
-    if (game && game.player) {
-        game.updatePlayerDirection(xdir, ydir);
+    // Update pause status display
+    if (game.isPaused) {
+        // Display paused state
+        if (game.player) game.player.show();
+        
+        // Show all game objects in their current positions
+        game.aliens.forEach(alien => alien.show());
+        game.fastAliens.forEach(fastAlien => fastAlien.show());
+        game.shooterAliens.forEach(shooterAlien => shooterAlien.show());
+        game.bullets.forEach(bullet => bullet.show());
+        game.enemyBullets.forEach(enemyBullet => enemyBullet.show());
+        if (game.bulletBox) game.bulletBox.show();
+        
+        // Show "PAUSED" text
+        textAlign(CENTER, CENTER);
+        textSize(36);
+        fill(255, 255, 255, 180);
+        stroke(0);
+        strokeWeight(3);
+        text("PAUSED", width / 2, height / 2);
+        
+        // Update UI to ensure it shows correct state
+        game.updateGameUI();
+    } else {
+        // Game is running - update everything
+        game.update();
     }
 }
 
@@ -513,11 +925,19 @@ class Player {
     }
 }
 
+// Modified Bullet class with reset method for pooling
 class Bullet {
     constructor(x, y) {
         this.x = x;
         this.y = y;
         this.r = 8;
+        this.active = true;
+    }
+
+    reset(x, y) {
+        this.x = x;
+        this.y = y;
+        this.active = true;
     }
 
     show() {
@@ -530,8 +950,53 @@ class Bullet {
     }
 
     hits(alien) {
-        let d = dist(this.x, this.y, alien.x + 30, alien.y + 30);
-        return d < this.r + alien.r;
+        // Skip hit detection for inactive bullets
+        if (!this.active) return false;
+        
+        // Use square distance for better performance (avoid sqrt)
+        const dx = this.x - (alien.x + 30);
+        const dy = this.y - (alien.y + 30);
+        const distSquared = dx*dx + dy*dy;
+        const radiusSum = this.r + alien.r;
+        
+        return distSquared < radiusSum * radiusSum;
+    }
+}
+
+class BulletBox {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.width = 40;
+        this.height = 40;
+    }
+    
+    show() {
+        fill(255, 165, 0); // Orange color
+        stroke(0);
+        strokeWeight(2);
+        rect(this.x, this.y, this.width, this.height);
+        
+        // Draw bullet icon
+        fill(50, 205, 50); // Green color for bullet
+        noStroke();
+        ellipse(this.x + this.width/2, this.y + this.height/2, 20, 20);
+        
+        // Draw +7 text
+        fill(255);
+        textSize(12);
+        textAlign(CENTER, CENTER);
+        text("+7", this.x + this.width/2, this.y + this.height/2);
+    }
+    
+    hits(player) {
+        // Check if the player overlaps with this bullet box
+        return (
+            this.x < player.x + 60 &&
+            this.x + this.width > player.x &&
+            this.y < player.y + 60 &&
+            this.y + this.height > player.y
+        );
     }
 }
 
@@ -566,6 +1031,61 @@ class FastAlien extends Alien {
         super(x, y, speedMultiplier);
         this.xdir = 5 * speedMultiplier;
         this.ydir = 1 * speedMultiplier;
+    }
+}
+
+// Add ShooterAlien class
+class ShooterAlien extends Alien {
+    constructor(x, y, speedMultiplier) {
+        super(x, y, speedMultiplier);
+        this.xdir = 2 * speedMultiplier; // Slower than fast aliens but faster than regular aliens
+    }
+    
+    show() {
+        // Draw the regular alien
+        image(alienImage, this.x, this.y, 60, 60);
+        
+        // Add simple gun indicator (just a rectangle)
+        fill(255, 0, 0);
+        rect(this.x + 25, this.y + 60, 10, 15);
+    }
+}
+
+// Modified EnemyBullet class with reset method for pooling
+class EnemyBullet {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.r = 8;
+        this.active = true;
+    }
+    
+    reset(x, y) {
+        this.x = x;
+        this.y = y;
+        this.active = true;
+    }
+
+    show() {
+        fill(255, 0, 0); // Red bullets for enemies
+        ellipse(this.x, this.y, this.r * 2);
+    }
+
+    move() {
+        this.y = this.y + 7; // Moves downward
+    }
+
+    hits(player) {
+        // Skip hit detection for inactive bullets
+        if (!this.active) return false;
+        
+        // Use square distance for better performance
+        const dx = this.x - (player.x + 30);
+        const dy = this.y - (player.y + 30);
+        const distSquared = dx*dx + dy*dy;
+        const radiusSum = this.r + 30; // 30 is player radius
+        
+        return distSquared < radiusSum * radiusSum;
     }
 }
 
