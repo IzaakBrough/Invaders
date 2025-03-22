@@ -50,6 +50,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Detect devices with notches and add the appropriate class
     detectNotchedDevices();
+    
+    // Add touch events to menu buttons to ensure they work on mobile
+    enhanceButtonsForTouch();
 });
 
 // Function to update instructions based on screen size
@@ -345,26 +348,32 @@ class Game {
                 this.leaderboard.displayLeaderboard();
                 gameOverScreen.classList.add('hidden');
                 leaderboardScreen.classList.remove('hidden');
+                // Force display style to ensure visibility
+                leaderboardScreen.style.display = "flex";
             }
         };
         
-        // Play/Pause button
-        playPauseButton.onclick = () => {
+        // Play/Pause button - improved for touch
+        playPauseButton.onclick = (e) => {
+            console.log("Play/Pause button clicked");
             this.togglePause();
         };
         
-        // View Leaderboard button
-        viewLeaderboardButton.onclick = () => {
+        // View Leaderboard button - improved for touch
+        viewLeaderboardButton.onclick = (e) => {
+            console.log("View Leaderboard button clicked");
             // Only show leaderboard if game is paused
             this.setPaused(true);
             this.leaderboard.displayLeaderboard();
             gameOverScreen.classList.add('hidden');
             leaderboardScreen.classList.remove('hidden');
+            // Force display style to ensure visibility
             leaderboardScreen.style.display = "flex";
         };
         
         // Back button
-        leaderboardBackButton.addEventListener('click', () => {
+        leaderboardBackButton.onclick = (e) => {
+            console.log("Leaderboard Back button clicked");
             leaderboardScreen.classList.add('hidden');
             leaderboardScreen.style.display = "none";
             // Don't automatically reset, just go back to paused/playing game
@@ -375,7 +384,7 @@ class Game {
                 // If it was game over, start a new game
                 this.reset();
             }
-        });
+        };
     }
     
     // Add new methods to handle pause state
@@ -1296,4 +1305,65 @@ function debugScreenVisibility(message) {
     console.log(message);
     console.log("Game Over Screen hidden?", gameOverScreen.classList.contains('hidden'));
     console.log("Leaderboard Screen hidden?", leaderboardScreen.classList.contains('hidden'));
+}
+
+// New function to add touch support for buttons
+function enhanceButtonsForTouch() {
+    // Get all menu buttons
+    const menuButtons = document.querySelectorAll('.menu-button');
+    
+    // Enhance each button with proper touch events
+    menuButtons.forEach(button => {
+        // Add touchstart event specifically for mobile
+        button.addEventListener('touchstart', function(e) {
+            // Prevent default to avoid double-triggering or ghost clicks
+            e.preventDefault();
+            
+            // Add active class for visual feedback
+            this.classList.add('button-pressed');
+            
+            // Simulate click after short delay for better visual feedback
+            setTimeout(() => {
+                // Trigger the click event programmatically
+                this.click();
+                // Remove active class
+                this.classList.remove('button-pressed');
+            }, 100);
+        });
+        
+        // Add touchend event to handle gesture completion
+        button.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            this.classList.remove('button-pressed');
+        });
+        
+        // Add touchcancel for better error recovery
+        button.addEventListener('touchcancel', function(e) {
+            e.preventDefault();
+            this.classList.remove('button-pressed');
+        });
+    });
+    
+    // Same process for game over and leaderboard screens buttons
+    const allGameButtons = document.querySelectorAll('#gameOverScreen button, #leaderboardScreen button');
+    allGameButtons.forEach(button => {
+        button.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            this.classList.add('button-pressed');
+            setTimeout(() => {
+                this.click();
+                this.classList.remove('button-pressed');
+            }, 100);
+        });
+        
+        button.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            this.classList.remove('button-pressed');
+        });
+        
+        button.addEventListener('touchcancel', function(e) {
+            e.preventDefault();
+            this.classList.remove('button-pressed');
+        });
+    });
 }

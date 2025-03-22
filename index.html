@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <!-- Updated viewport meta tag with viewport-fit=cover for notched devices -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <!-- Updated viewport meta tag with improved touch handling -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no, maximum-scale=1.0">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Space Invaders Redux</title>
@@ -57,5 +57,23 @@
     </div>
     <script src="touchcontrols.js"></script>
     <script src="sketch.js"></script>
+    <script>
+        // Prevent double-tap zoom on iOS
+        document.addEventListener('touchend', function(e) {
+            // Prevent double-tap zoom but only for game elements
+            if (e.target.closest('.menu-button, .game-over-content button, .leaderboard-screen button, .touch-controls')) {
+                e.preventDefault();
+                // Still allow the click event to fire
+                setTimeout(() => {}, 300);
+            }
+        }, false);
+        
+        // Fix for iOS to prevent body scrolling when interacting with the game
+        document.body.addEventListener('touchmove', function(e) {
+            if (e.target.closest('.touch-controls, #gameCanvas, .game-menu, .game-over-screen, .leaderboard-screen')) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+    </script>
 </body>
 </html>

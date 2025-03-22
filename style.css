@@ -93,7 +93,7 @@ p {
   margin: 0 auto;
 }
 
-/* Game menu styling */
+/* Game menu styling with enhanced touch support */
 .game-menu {
   display: flex;
   justify-content: center;
@@ -101,6 +101,8 @@ p {
   margin: 0.3rem 0; /* Reduced margins */
   gap: 1rem;
   width: 100%;
+  position: relative;
+  z-index: 5; /* Ensure buttons are above other elements for touch */
 }
 
 .menu-button {
@@ -114,20 +116,27 @@ p {
   font-family: 'Press Start 2P', cursive, sans-serif;
   border-radius: 5px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  /* Ensure tapping works on touchscreens */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation; /* Optimize for touch */
+  user-select: none; /* Prevent text selection on touch */
+  position: relative; /* For proper stacking context */
+}
+
+/* Add a pressed state for visual touch feedback */
+.menu-button.button-pressed,
+.menu-button:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  background-color: #3d8b40;
 }
 
 .menu-button:hover {
   background-color: #45a049;
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-}
-
-.menu-button:active {
-  background-color: #398e3d;
-  transform: translateY(0);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 /* Play button (green) */
@@ -143,8 +152,16 @@ p {
 
 .play-button:hover {
   background-color: #5dbd61 !important;
-  transform: translateY(-3px) scale(1.05);
+  transform: translateY(-2px) scale(1.05);
   box-shadow: 0 6px 12px rgba(0, 120, 0, 0.5) !important;
+}
+
+/* Add specific pressed state for the play button */
+.play-button.button-pressed,
+.play-button:active {
+  transform: translateY(3px) scale(0.98) !important;
+  box-shadow: 0 2px 4px rgba(0, 120, 0, 0.3) !important;
+  background-color: #3d8b40 !important;
 }
 
 /* Pause button (red/orange) */
@@ -159,8 +176,16 @@ p {
 
 .pause-button:hover {
   background-color: #FF6347 !important; /* Tomato color */
-  transform: translateY(-3px) scale(1.05);
+  transform: translateY(-2px) scale(1.05);
   box-shadow: 0 6px 12px rgba(255, 99, 71, 0.5) !important;
+}
+
+/* Add specific pressed state for the pause button */
+.pause-button.button-pressed,
+.pause-button:active {
+  transform: translateY(3px) scale(0.98) !important;
+  box-shadow: 0 2px 4px rgba(255, 99, 71, 0.3) !important;
+  background-color: #e56b42 !important;
 }
 
 @keyframes pulse-green {
@@ -216,6 +241,17 @@ p {
     font-size: 0.9rem;
     font-weight: bold;
     font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+    position: relative;
+    z-index: 1001; /* Ensure these are on top of everything */
+}
+
+.game-over-content button.button-pressed,
+.game-over-content button:active {
+    transform: translateY(2px);
+    background-color: #f5f5f5;
 }
 
 .game-over-content button:hover {
@@ -313,6 +349,17 @@ p {
     font-size: 0.9rem;
     font-weight: bold;
     font-family: 'Press Start 2P', cursive, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+    position: relative;
+    z-index: 1001; /* Ensure these are on top of everything */
+}
+
+.leaderboard-screen button.button-pressed,
+.leaderboard-screen button:active {
+    transform: translateY(2px);
+    background-color: #f5f5f5;
 }
 
 .leaderboard-screen button:hover {
@@ -355,6 +402,8 @@ p {
   padding: 10px 20px;
   z-index: 100;
   pointer-events: none; /* Allow clicks to pass through the container */
+  /* Ensure it doesn't block interaction with menu buttons */
+  pointer-events: none;
 }
 
 .joystick {
