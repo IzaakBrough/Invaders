@@ -786,11 +786,18 @@ class Game {
     }
     
     checkPlayerHit() {
+        // Don't check for collisions during invincibility
+        if (this.player.isInvincible) return;
+        
         for (let i = this.aliens.length - 1; i >= 0; i--) {
             if (this.aliens[i].hits(this.player)) {
                 this.lives -= 1;
                 this.aliens.splice(i, 1);
                 console.log("Player hit! Lives:", this.lives);
+                
+                // Trigger hit effect and invincibility
+                this.player.registerHit();
+                
                 if (this.lives <= 0) {
                     console.log("Player died! Game over!");
                     this.gameOver();
@@ -803,6 +810,10 @@ class Game {
                 this.lives -= 1;
                 this.fastAliens.splice(i, 1);
                 console.log("Player hit by fast alien! Lives:", this.lives);
+                
+                // Trigger hit effect and invincibility
+                this.player.registerHit();
+                
                 if (this.lives <= 0) {
                     console.log("Player died! Game over!");
                     this.gameOver();
@@ -812,11 +823,18 @@ class Game {
     }
     
     checkEnemyBulletCollisions() {
+        // Don't check for collisions during invincibility
+        if (this.player.isInvincible) return;
+        
         for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
             if (this.enemyBullets[i].hits(this.player)) {
                 this.lives -= 1;
                 this.enemyBullets.splice(i, 1);
                 console.log("Player hit by enemy bullet! Lives:", this.lives);
+                
+                // Trigger hit effect and invincibility
+                this.player.registerHit();
+                
                 if (this.lives <= 0) {
                     console.log("Player died! Game over!");
                     this.gameOver();
@@ -1101,10 +1119,58 @@ class Player {
         this.ydir = 0;
         this.speed = 5 * scaleFactor; // Scale speed
         this.size = 60 * scaleFactor; // Scale size
+        
+        // Add properties for hit effect and invincibility
+        this.isHit = false;
+        this.isInvincible = false;
+        this.hitTime = 0;
+        this.invincibilityDuration = 1000; // 1 second in milliseconds
+        this.flashInterval = 100; // Flash every 100ms
+        this.lastFlashTime = 0;
+        this.showPlayer = true; // For flash effect
     }
 
     show() {
-        image(playerImage, this.x, this.y, this.size, this.size);
+        if (this.isInvincible) {
+            // Flash effect during invincibility
+            const currentTime = millis();
+            if (currentTime - this.lastFlashTime > this.flashInterval) {
+                this.showPlayer = !this.showPlayer;
+                this.lastFlashTime = currentTime;
+            }
+            
+            // Draw shield effect around the player (moved here from draw() function)
+            // This ensures the shield always follows the player correctly
+            push();
+            noFill();
+            stroke(100, 200, 255, 80);
+            strokeWeight(3 * scaleFactor);
+            // Ensure the shield is centered on the player using current position
+            ellipse(
+                this.x + this.size/2, 
+                this.y + this.size/2, 
+                this.size * 1.3, 
+                this.size * 1.3
+            );
+            pop();
+            
+            // Skip rendering player on some frames for flash effect
+            if (!this.showPlayer) return;
+            
+            // Apply red tint for hit feedback
+            push(); // Save the current drawing style
+            if (this.isHit) {
+                tint(255, 100, 100, 200); // Red tint
+            } else {
+                // Subtle white flash for invincibility
+                tint(255, 255, 255, 200);
+            }
+            image(playerImage, this.x, this.y, this.size, this.size);
+            pop(); // Restore the previous drawing style
+        } else {
+            // Normal rendering
+            image(playerImage, this.x, this.y, this.size, this.size);
+        }
     }
 
     setDir(xdir, ydir) {
@@ -1128,6 +1194,45 @@ class Player {
         // Constrain to canvas
         this.x = constrain(this.x, 0, width - this.size);
         this.y = constrain(this.y, 0, height - this.size);
+        
+        // Update hit state and invincibility
+        this.updateHitState();
+    }
+    
+    // Add method to handle hit effect and invincibility
+    registerHit() {
+        if (!this.isInvincible) {
+            this.isHit = true;
+            this.isInvincible = true;
+            this.hitTime = millis();
+            
+            // Add screen flash effect when player is hit
+            try {
+                // Call the flashScreen function defined in index.html
+                window.flashScreen();
+            } catch (e) {
+                console.log("Could not trigger screen flash effect", e);
+            }
+        }
+    }
+    
+    // Update hit state based on timing
+    updateHitState() {
+        if (this.isInvincible) {
+            const currentTime = millis();
+            const elapsedTime = currentTime - this.hitTime;
+            
+            // After 0.3 seconds, remove the hit effect but keep invincibility
+            if (this.isHit && elapsedTime > 300) {
+                this.isHit = false;
+            }
+            
+            // After invincibility duration, remove invincibility
+            if (elapsedTime > this.invincibilityDuration) {
+                this.isInvincible = false;
+                this.showPlayer = true;
+            }
+        }
     }
 }
 

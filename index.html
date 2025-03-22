@@ -13,6 +13,7 @@
     <script src="libraries/p5.min.js"></script>
 </head>
 <body>
+    <div id="screenFlashOverlay"></div>
     <div class="game-container">
         <h1>Space Invaders Redux</h1>
         <p>Use WASD keys to move and the space bar to shoot.</p>
@@ -74,6 +75,15 @@
                 e.preventDefault();
             }
         }, { passive: false });
+
+        // Add screen flash effect when player is hit
+        function flashScreen() {
+            const gameCanvas = document.getElementById('gameCanvas');
+            gameCanvas.classList.add('player-hit');
+            setTimeout(() => {
+                gameCanvas.classList.remove('player-hit');
+            }, 500);
+        }
     </script>
 </body>
 </html>

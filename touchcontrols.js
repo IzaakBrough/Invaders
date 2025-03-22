@@ -14,14 +14,16 @@ class TouchControls {
         // Adaptive sizing based on screen size
         this.updateSizeParameters();
         
-        // Touch/Mouse IDs to track multiple inputs
+        // Improved touch tracking
         this.joystickTouchID = null;
         this.fireTouchID = null;
         this.mouseActive = false;
         
-        // Last fire time for cooldown
+        // Enhanced firing control with stricter cooldown enforcement
         this.lastFireTime = 0;
         this.fireCooldown = 300; // ms between shots
+        this.fireButtonPressed = false; // Track actual button state
+        this.continuousFiring = false; // Track if continuous firing is active
         
         // Setup the event handlers
         this.setupEventHandlers();
@@ -171,10 +173,10 @@ class TouchControls {
         this.lastTouchTime = Date.now();
         
         // Find our joystick touch by ID
-        if (this.joystickActive) {
-            for (let i = 0; i < e.touches.length; i++) {
-                if (e.touches[i].identifier === this.joystickTouchID) {
-                    const touch = e.touches[i];
+        if (this.joystickActive && this.joystickTouchID !== null) {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === this.joystickTouchID) {
+                    const touch = e.changedTouches[i];
                     
                     // Update tracked touch
                     this.activeTouches.set(this.joystickTouchID, {
@@ -197,28 +199,20 @@ class TouchControls {
         
         // Check if our joystick touch ended
         if (this.joystickActive) {
-            let touchFound = false;
-            
-            // Check if joystick touch is still active
-            for (let i = 0; i < e.touches.length; i++) {
-                if (e.touches[i].identifier === this.joystickTouchID) {
-                    touchFound = true;
-                    break;
-                }
-            }
-            
-            // If not found, joystick touch has ended
-            if (!touchFound) {
-                // Remove from active touches
-                this.activeTouches.delete(this.joystickTouchID);
-                
-                this.joystickTouchID = null;
-                this.joystickActive = false;
-                this.returnToCenter = true;
-                
-                // Update game direction to stop moving
-                if (this.game && this.game.updatePlayerDirection) {
-                    this.game.updatePlayerDirection(0, 0);
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === this.joystickTouchID) {
+                    // Remove from active touches
+                    this.activeTouches.delete(this.joystickTouchID);
+                    
+                    this.joystickTouchID = null;
+                    this.joystickActive = false;
+                    this.returnToCenter = true;
+                    
+                    // Update game direction to stop moving
+                    if (this.game && this.game.updatePlayerDirection) {
+                        this.game.updatePlayerDirection(0, 0);
+                    }
+                    return;
                 }
             }
         }
@@ -344,24 +338,48 @@ class TouchControls {
         
         // Only start if we're not already tracking a fire touch
         if (this.fireTouchID === null) {
-            const touch = e.touches[0];
-            this.fireTouchID = touch.identifier;
-            this.fireButtonActive = true;
-            this.isFiring = true;
+            // Find first available touch that isn't being used for joystick
+            let touchFound = false;
             
-            // Track this touch
-            this.activeTouches.set(this.fireTouchID, {
-                type: 'fire',
-                x: touch.clientX,
-                y: touch.clientY,
-                time: Date.now()
-            });
+            for (let i = 0; i < e.touches.length; i++) {
+                const touchId = e.touches[i].identifier;
+                
+                // Skip if this touch is already used for joystick
+                if (touchId === this.joystickTouchID) continue;
+                
+                const touch = e.touches[i];
+                this.fireTouchID = touchId;
+                touchFound = true;
+                
+                // Track this touch
+                this.activeTouches.set(this.fireTouchID, {
+                    type: 'fire',
+                    x: touch.clientX,
+                    y: touch.clientY,
+                    time: Date.now()
+                });
+                
+                break;
+            }
             
-            this.fireButton.classList.add('active');
-            this.fire();
-            
-            // Start continuous firing
-            this.fireInterval = setInterval(() => this.fire(), this.fireCooldown);
+            // Only proceed if we found a valid touch
+            if (touchFound) {
+                this.fireButtonPressed = true;
+                this.fireButtonActive = true;
+                this.isFiring = true;
+                this.fireButton.classList.add('active');
+                
+                // Initial fire
+                this.fire();
+                
+                // Start continuous firing with rate limiting
+                if (this.fireInterval) clearInterval(this.fireInterval);
+                this.fireInterval = setInterval(() => {
+                    if (this.fireButtonPressed) this.fire();
+                }, this.fireCooldown);
+                
+                this.continuousFiring = true;
+            }
         }
     }
     
@@ -370,19 +388,12 @@ class TouchControls {
         this.lastTouchTime = Date.now();
         
         // Check if our fire touch ended
-        let touchFound = false;
-        
-        // Check if fire touch is still active
-        for (let i = 0; i < e.touches.length; i++) {
-            if (e.touches[i].identifier === this.fireTouchID) {
-                touchFound = true;
-                break;
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            if (touch.identifier === this.fireTouchID) {
+                this.releaseFireButton();
+                return;
             }
-        }
-        
-        // If not found, fire touch has ended
-        if (!touchFound) {
-            this.releaseFireButton();
         }
     }
     
@@ -422,19 +433,45 @@ class TouchControls {
         }
     }
     
+    // Improved fire button release method
+    releaseFireButton() {
+        // Remove from active touches
+        this.activeTouches.delete(this.fireTouchID);
+        
+        this.fireTouchID = null;
+        this.fireButtonPressed = false;
+        this.fireButtonActive = false;
+        this.isFiring = false;
+        this.continuousFiring = false;
+        
+        // Use a short delay to reset the button to avoid visual glitches
+        if (this.buttonResetTimer) clearTimeout(this.buttonResetTimer);
+        this.buttonResetTimer = setTimeout(() => {
+            this.fireButton.classList.remove('active');
+        }, 50);
+        
+        // Stop continuous firing
+        if (this.fireInterval) {
+            clearInterval(this.fireInterval);
+            this.fireInterval = null;
+        }
+    }
+    
     fire() {
-        // Check cooldown
+        // Check cooldown with stricter enforcement
         const now = Date.now();
-        if (now - this.lastFireTime < this.fireCooldown) return;
+        if (now - this.lastFireTime < this.fireCooldown) {
+            return;
+        }
         
         // Fire the bullet
-        if (this.game && this.game.fireBullet) {
+        if (this.game && this.game.fireBullet && !this.game.isPaused) {
             this.game.fireBullet();
             this.lastFireTime = now;
         }
         
         // Update last touch time to prevent stuck button detection
-        this.lastTouchTime = Date.now();
+        this.lastTouchTime = now;
     }
     
     update() {
@@ -486,66 +523,62 @@ class TouchControls {
         }
     }
     
-    // Add new method to check and fix stuck buttons
+    // For safety, implement an additional check method that runs periodically
     checkForStuckButtons() {
         const now = Date.now();
         
-        // If fire button appears stuck (active but no recent touches for 2 seconds)
-        if (this.fireButtonActive && now - this.lastTouchTime > 2000) {
+        // If fire button appears stuck (active but no recent touches for 1.5 seconds)
+        if (this.fireButtonActive && now - this.lastTouchTime > 1500) {
             console.log("Fire button appears stuck - forcing release");
-            this.fireTouchID = null;
-            this.fireButtonActive = false;
-            this.isFiring = false; // Reset firing state
-            this.fireButton.classList.remove('active');
+            this.releaseFireButton();
+        }
+        
+        // Check if joystick is stuck
+        if (this.joystickActive && now - this.lastTouchTime > 1500) {
+            console.log("Joystick appears stuck - resetting");
+            this.joystickTouchID = null;
+            this.joystickActive = false;
+            this.returnToCenter = true;
             
-            // Stop continuous firing
-            if (this.fireInterval) {
-                clearInterval(this.fireInterval);
-                this.fireInterval = null;
+            // Update game direction to stop moving
+            if (this.game && this.game.updatePlayerDirection) {
+                this.game.updatePlayerDirection(0, 0);
             }
         }
-    }
-    
-    // New helper method to centralize fire button release logic
-    releaseFireButton() {
-        // Remove from active touches
-        this.activeTouches.delete(this.fireTouchID);
         
-        this.fireTouchID = null;
-        this.fireButtonActive = false;
-        this.isFiring = false;
-        
-        // Use a short delay to reset the button to avoid visual glitches
-        // from rapid touch events
-        if (this.buttonResetTimer) clearTimeout(this.buttonResetTimer);
-        this.buttonResetTimer = setTimeout(() => {
-            this.fireButton.classList.remove('active');
-        }, 50);
-        
-        // Stop continuous firing
-        if (this.fireInterval) {
-            clearInterval(this.fireInterval);
-            this.fireInterval = null;
+        // Verify that fire cooldown is being respected
+        if (this.continuousFiring && now - this.lastFireTime < this.fireCooldown * 0.8) {
+            console.log("Firing too fast - enforcing cooldown");
+            // Reset firing timing to prevent too-rapid fire
+            this.lastFireTime = now - (this.fireCooldown * 0.5);
         }
     }
     
     // Enhanced global touch cancel handler
     handleGlobalTouchCancel(e) {
         console.log("Global touch cancel event received");
-        // Reset all touch tracking
-        this.activeTouches.clear();
         
-        // Reset fire button with the enhanced method
-        this.releaseFireButton();
-        
-        // Reset joystick
-        this.joystickTouchID = null;
-        this.joystickActive = false;
-        this.returnToCenter = true;
-        
-        // Update game direction to stop moving
-        if (this.game && this.game.updatePlayerDirection) {
-            this.game.updatePlayerDirection(0, 0);
+        // Check each changed touch to see if it matches our tracked touches
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            
+            if (touch.identifier === this.joystickTouchID) {
+                // Reset joystick if it was this touch
+                this.joystickTouchID = null;
+                this.joystickActive = false;
+                this.returnToCenter = true;
+                this.activeTouches.delete(touch.identifier);
+                
+                // Update game direction to stop moving
+                if (this.game && this.game.updatePlayerDirection) {
+                    this.game.updatePlayerDirection(0, 0);
+                }
+            }
+            
+            if (touch.identifier === this.fireTouchID) {
+                // Reset fire button if it was this touch
+                this.releaseFireButton();
+            }
         }
     }
     
