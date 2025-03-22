@@ -76,13 +76,36 @@
             }
         }, { passive: false });
 
-        // Add screen flash effect when player is hit
+        // Improved screen flash effect when player is hit
         function flashScreen() {
             const gameCanvas = document.getElementById('gameCanvas');
-            gameCanvas.classList.add('player-hit');
-            setTimeout(() => {
-                gameCanvas.classList.remove('player-hit');
-            }, 500);
+            const overlay = document.getElementById('screenFlashOverlay');
+            
+            if (gameCanvas && overlay) {
+                // Position the overlay exactly over the canvas
+                const rect = gameCanvas.getBoundingClientRect();
+                overlay.style.position = 'absolute';
+                overlay.style.top = rect.top + 'px';
+                overlay.style.left = rect.left + 'px';
+                overlay.style.width = rect.width + 'px';
+                overlay.style.height = rect.height + 'px';
+                overlay.style.borderRadius = '5px'; // Match canvas border radius if any
+                overlay.style.pointerEvents = 'none'; // Allow clicks to pass through
+                overlay.style.zIndex = '9999'; // Make sure it's on top
+                
+                // Show the overlay with animation
+                overlay.style.display = 'block';
+                overlay.style.animation = 'flash-animation 0.5s';
+                
+                // Add the player-hit class to the canvas for additional effect
+                gameCanvas.classList.add('player-hit');
+                
+                // Hide overlay and remove class after animation completes
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                    gameCanvas.classList.remove('player-hit');
+                }, 500);
+            }
         }
     </script>
 </body>

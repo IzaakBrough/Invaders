@@ -1206,10 +1206,15 @@ class Player {
             this.isInvincible = true;
             this.hitTime = millis();
             
-            // Add screen flash effect when player is hit
+            // Improved screen flash effect with better mobile handling
             try {
                 // Call the flashScreen function defined in index.html
                 window.flashScreen();
+                
+                // Try to trigger vibration on supported devices for better feedback
+                if (navigator.vibrate) {
+                    navigator.vibrate(100);
+                }
             } catch (e) {
                 console.log("Could not trigger screen flash effect", e);
             }
