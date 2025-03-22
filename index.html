@@ -2,12 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Updated viewport meta tag with viewport-fit=cover for notched devices -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Space Invaders Redux</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-    <!-- Add favicon link to prevent 404 error -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👾</text></svg>">
+    <script src="libraries/p5.min.js"></script>
 </head>
 <body>
     <div class="game-container">
@@ -29,6 +32,14 @@
 
         <div id="gameCanvas"></div>
         
+        <!-- Add touch controls -->
+        <div id="touchControls" class="touch-controls hidden">
+            <div id="joystick" class="joystick">
+                <div id="joystickKnob" class="joystick-knob"></div>
+            </div>
+            <div id="fireButton" class="fire-button">FIRE</div>
+        </div>
+        
         <div id="gameOverScreen" class="game-over-screen hidden">
             <div class="game-over-content">
                 <h2>Game Over</h2>
@@ -44,7 +55,7 @@
             <button id="leaderboardBack">Back to Game</button>
         </div>
     </div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <script src="touchcontrols.js"></script>
     <script src="sketch.js"></script>
 </body>
 </html>

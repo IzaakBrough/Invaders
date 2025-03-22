@@ -16,6 +16,9 @@ const viewLeaderboardButton = document.getElementById('viewLeaderboardButton');
 // Add these constants at the top with the other DOM elements
 const instructionsElement = document.querySelector('.game-container > p');
 
+// Add touchControlsElement
+const touchControlsElement = document.getElementById('touchControls');
+
 // Images
 let alienImage;
 let playerImage;
@@ -35,7 +38,113 @@ document.addEventListener('DOMContentLoaded', function() {
     leaderboardScreen.style.display = "none";
     gameOverScreen.classList.add('hidden');
     leaderboardScreen.classList.add('hidden');
+    
+    // Always show controls regardless of device type
+    touchControlsElement.classList.remove('hidden');
+    
+    // Update instructions based on screen size
+    updateInstructions();
+    
+    // Add listener to update instructions when screen size changes
+    window.addEventListener('resize', updateInstructions);
+    
+    // Detect devices with notches and add the appropriate class
+    detectNotchedDevices();
 });
+
+// Function to update instructions based on screen size
+function updateInstructions() {
+    if (window.innerWidth <= 768) {
+        // Hide or simplify instructions for mobile devices
+        instructionsElement.textContent = "Tap to play";
+        instructionsElement.style.fontSize = window.innerWidth <= 480 ? "0.5rem" : "0.7rem";
+    } else {
+        // Show full instructions for desktop
+        instructionsElement.textContent = "Use WASD to move and space to shoot";
+        instructionsElement.style.fontSize = "0.8rem";
+    }
+}
+
+// Function to detect devices with notches (like iPhone X and newer)
+function detectNotchedDevices() {
+    // First check if we're on iOS
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    
+    // Add data attribute to track if device has a notch
+    document.documentElement.setAttribute('data-has-notch', 'false');
+    
+    // Detection method 1: CSS supports env() variables (safe area insets)
+    if (CSS.supports('padding-top: env(safe-area-inset-top)')) {
+        console.log("Device supports safe area insets");
+        document.documentElement.setAttribute('data-supports-safe-area', 'true');
+        
+        // iOS devices with a notch
+        if (isIOS) {
+            // Check aspect ratio - notched devices have ratio >= 2
+            const aspectRatio = window.screen.height / window.screen.width;
+            if (aspectRatio >= 2 || aspectRatio <= 0.5) { // Check both portrait and landscape
+                document.body.classList.add('has-notch');
+                document.documentElement.setAttribute('data-has-notch', 'true');
+                console.log("iOS device with aspect ratio suggesting notch detected");
+            }
+        }
+    }
+    
+    // Detection method 2: Check specific device dimensions
+    const isNotchedIPhone = 
+        // iPhone X/XS/11 Pro
+        (window.screen.height === 812 && window.screen.width === 375) || 
+        (window.screen.height === 375 && window.screen.width === 812) ||
+        
+        // iPhone XR/11, XS Max/11 Pro Max
+        (window.screen.height === 896 && window.screen.width === 414) || 
+        (window.screen.height === 414 && window.screen.width === 896) ||
+        
+        // iPhone 12/12 Pro/13/13 Pro
+        (window.screen.height === 844 && window.screen.width === 390) || 
+        (window.screen.height === 390 && window.screen.width === 844) ||
+        
+        // iPhone 12 Pro Max/13 Pro Max
+        (window.screen.height === 926 && window.screen.width === 428) || 
+        (window.screen.height === 428 && window.screen.width === 926) ||
+        
+        // iPhone 14/14 Pro
+        (window.screen.height === 852 && window.screen.width === 393) || 
+        (window.screen.height === 393 && window.screen.width === 852) ||
+        
+        // iPhone 14 Pro Max/15 Pro Max
+        (window.screen.height === 932 && window.screen.width === 430) ||
+        (window.screen.height === 430 && window.screen.width === 932) ||
+        
+        // iPhone 15/15 Pro
+        (window.screen.height === 852 && window.screen.width === 393) ||
+        (window.screen.height === 393 && window.screen.width === 852);
+
+    if (isNotchedIPhone) {
+        document.body.classList.add('has-notch');
+        document.documentElement.setAttribute('data-has-notch', 'true');
+        console.log("Detected iPhone model with notch by exact dimensions");
+        
+        // Add extra padding to game container for notched iPhones
+        const gameContainer = document.querySelector('.game-container');
+        if (gameContainer) {
+            // This padding is added once during initialization
+            gameContainer.style.paddingTop = "env(safe-area-inset-top, 10px)";
+        }
+    }
+    
+    // Add listener for orientation changes to reapply the detection
+    window.addEventListener('orientationchange', function() {
+        // Short delay to allow screen dimensions to update
+        setTimeout(() => {
+            detectNotchedDevices();
+        }, 100);
+    });
+    
+    // Apply safe area insets regardless of notch detection
+    // This ensures devices with future notches will still work
+    document.body.style.paddingTop = "env(safe-area-inset-top, 10px)";
+}
 
 // Add new Controls class
 class Controls {
@@ -141,6 +250,11 @@ class Controls {
     }
 }
 
+// Add global scaling variables
+let scaleFactor = 1;
+let baseWidth = 900; // Base width for scaling calculations
+let baseHeight = 600; // Base height for scaling calculations
+
 class Game {
     constructor() {
         this.player = null;
@@ -182,6 +296,9 @@ class Game {
         
         // Add controls property
         this.controls = null;
+        
+        // Add touch controls property
+        this.touchControls = null;
     }
     
     setup() {
@@ -207,6 +324,9 @@ class Game {
         
         // Initialize controls
         this.controls = new Controls(this);
+        
+        // Initialize touch controls for all devices
+        this.touchControls = new TouchControls(this);
         
         // Start in paused state
         this.setPaused(true);
@@ -383,6 +503,14 @@ class Game {
         if (!this.controls) {
             this.controls = new Controls(this);
         }
+        
+        // Always initialize touch controls
+        if (!this.touchControls) {
+            this.touchControls = new TouchControls(this);
+        } else {
+            // Reset joystick position
+            this.touchControls.resetJoystick();
+        }
     }
     
     update() {
@@ -394,6 +522,11 @@ class Game {
         this.updateGameUI();
         this.player.show();
         this.player.move();
+        
+        // Update touch controls if they exist
+        if (this.touchControls) {
+            this.touchControls.update();
+        }
         
         // Process bullets in batches to improve performance
         const isUpdateFrame = this.currentFrame % this.bulletUpdateInterval === 0;
@@ -493,20 +626,21 @@ class Game {
         const currentShooterCount = this.shooterAliens.length;
         
         for (let i = 0; i < aliensToAdd; i++) {
-            // Random position across the top of the screen
-            const x = random(width - 60);
+            // Random position across the top of the screen, accounting for alien size
+            const x = random(width - (60 * scaleFactor));
+            const yPos = 40 * scaleFactor; // Scale starting Y position
             
             // Only allow new shooter if we're below the max
             if (random() < this.shooterProbability && currentShooterCount < maxShooterAliens) {
-                this.shooterAliens.push(new ShooterAlien(x, 40, this.speedMultiplier));
+                this.shooterAliens.push(new ShooterAlien(x, yPos, this.speedMultiplier));
             } 
             // As game progresses, chance for fast aliens increases
             else if (random() < this.speedMultiplier / 10) {
-                this.fastAliens.push(new FastAlien(x, 60, this.speedMultiplier));
+                this.fastAliens.push(new FastAlien(x, yPos * 1.5, this.speedMultiplier));
             } 
             // Otherwise regular alien
             else {
-                this.aliens.push(new Alien(x, 40, this.speedMultiplier));
+                this.aliens.push(new Alien(x, yPos, this.speedMultiplier));
             }
         }
     }
@@ -545,9 +679,9 @@ class Game {
             let bullet;
             if (this.bulletPool.length > 0) {
                 bullet = this.bulletPool.pop();
-                bullet.reset(this.player.x + 30, this.player.y);
+                bullet.reset(this.player.x + this.player.size / 2, this.player.y);
             } else {
-                bullet = new Bullet(this.player.x + 30, this.player.y);
+                bullet = new Bullet(this.player.x + this.player.size / 2, this.player.y);
             }
             
             this.bullets.push(bullet);
@@ -565,8 +699,8 @@ class Game {
         // Only spawn if we don't already have a box
         if (!this.bulletBox) {
             // Random position along the bottom of the screen
-            const x = random(width - 40); // Account for box width
-            const y = height - 80; // Position near the bottom
+            const x = random(width - (40 * scaleFactor)); // Scale box width
+            const y = height - (80 * scaleFactor); // Scale position
             console.log("Spawning bullet box at:", x, y); // Debug output
             this.bulletBox = new BulletBox(x, y);
         }
@@ -740,9 +874,11 @@ class Game {
         let bullet;
         if (this.enemyBulletPool.length > 0) {
             bullet = this.enemyBulletPool.pop();
-            bullet.reset(shooterAlien.x + 30, shooterAlien.y + 60);
+            bullet.reset(shooterAlien.x + shooterAlien.size / 2, 
+                         shooterAlien.y + shooterAlien.size);
         } else {
-            bullet = new EnemyBullet(shooterAlien.x + 30, shooterAlien.y + 60);
+            bullet = new EnemyBullet(shooterAlien.x + shooterAlien.size / 2, 
+                                     shooterAlien.y + shooterAlien.size);
         }
         
         this.enemyBullets.push(bullet);
@@ -815,9 +951,23 @@ function setup() {
     const gameContainer = document.getElementById('gameCanvas');
     const containerWidth = gameContainer.offsetWidth;
     
-    // Standard canvas height for laptop devices
-    const canvasHeight = Math.min(600, window.innerHeight * 0.7);
+    // Calculate mobile-friendly scale factor (larger for small screens)
+    calculateScaleFactor(containerWidth);
     
+    // Calculate canvas height - use more screen space on mobile
+    let canvasHeight;
+    if (window.innerWidth <= 768) {
+        // For mobile: use more screen height (85%)
+        canvasHeight = Math.min(containerWidth * 0.75, window.innerHeight * 0.85);
+    } else {
+        // For desktop: maintain standard ratio
+        const aspectRatio = baseHeight / baseWidth;
+        canvasHeight = Math.min(containerWidth * aspectRatio, window.innerHeight * 0.75);
+    }
+    
+    console.log("Canvas size:", containerWidth, "x", canvasHeight, "Scale factor:", scaleFactor);
+    
+    // Create canvas with responsive dimensions
     let canvas = createCanvas(containerWidth, canvasHeight);
     canvas.parent('gameCanvas');
     
@@ -841,19 +991,65 @@ function setup() {
     });
 }
 
+// New function to calculate scale factor with enhanced mobile scaling
+function calculateScaleFactor(containerWidth) {
+    if (window.innerWidth <= 480) {
+        // Extra scaling for very small screens
+        scaleFactor = Math.max(containerWidth / baseWidth, 0.6);
+        // Ensure minimum scaling even on tiny screens
+        scaleFactor = Math.max(scaleFactor, 0.5);
+    } else if (window.innerWidth <= 768) {
+        // More scaling for tablets/medium screens
+        scaleFactor = Math.max(containerWidth / baseWidth, 0.7);
+    } else {
+        // Standard scaling for desktops
+        scaleFactor = containerWidth / baseWidth;
+    }
+}
+
 function windowResized() {
     // Resize canvas when window size changes
     const gameContainer = document.getElementById('gameCanvas');
     const containerWidth = gameContainer.offsetWidth;
-    const canvasHeight = Math.min(600, window.innerHeight * 0.7);
     
+    // Recalculate scale factor for new window size
+    calculateScaleFactor(containerWidth);
+    
+    // Calculate mobile-friendly canvas height
+    let canvasHeight;
+    if (window.innerWidth <= 768) {
+        // For mobile: use more screen height
+        canvasHeight = Math.min(containerWidth * 0.75, window.innerHeight * 0.85);
+    } else {
+        // For desktop: maintain standard ratio
+        const aspectRatio = baseHeight / baseWidth;
+        canvasHeight = Math.min(containerWidth * aspectRatio, window.innerHeight * 0.75);
+    }
+    
+    console.log("New canvas size:", containerWidth, "x", canvasHeight, "Scale factor:", scaleFactor);
+    
+    // Resize the canvas
     resizeCanvas(containerWidth, canvasHeight);
     
     // If we have a player, make sure it stays in bounds
     if (game && game.player) {
-        game.player.x = constrain(game.player.x, 0, width - 60);
-        game.player.y = constrain(game.player.y, 0, height - 60);
+        game.player.x = constrain(game.player.x, 0, width - (60 * scaleFactor));
+        game.player.y = constrain(game.player.y, 0, height - (60 * scaleFactor));
     }
+    
+    // Reset joystick position when window is resized
+    if (game && game.touchControls) {
+        // Use setTimeout to ensure the DOM has updated
+        setTimeout(() => {
+            game.touchControls.resetJoystick();
+        }, 100);
+    }
+    
+    // Update instructions
+    updateInstructions();
+    
+    // Recheck for notches on resize (handles orientation changes)
+    detectNotchedDevices();
 }
 
 function draw() {
@@ -872,12 +1068,12 @@ function draw() {
         game.enemyBullets.forEach(enemyBullet => enemyBullet.show());
         if (game.bulletBox) game.bulletBox.show();
         
-        // Show "PAUSED" text
+        // Show "PAUSED" text - with scaled font size
         textAlign(CENTER, CENTER);
-        textSize(36);
+        textSize(36 * scaleFactor);
         fill(255, 255, 255, 180);
         stroke(0);
-        strokeWeight(3);
+        strokeWeight(3 * scaleFactor);
         text("PAUSED", width / 2, height / 2);
         
         // Update UI to ensure it shows correct state
@@ -891,14 +1087,15 @@ function draw() {
 class Player {
     constructor() {
         this.x = width / 2;
-        this.y = height - 60;
+        this.y = height - (60 * scaleFactor);
         this.xdir = 0;
         this.ydir = 0;
-        this.speed = 5;
+        this.speed = 5 * scaleFactor; // Scale speed
+        this.size = 60 * scaleFactor; // Scale size
     }
 
     show() {
-        image(playerImage, this.x, this.y, 60, 60);
+        image(playerImage, this.x, this.y, this.size, this.size);
     }
 
     setDir(xdir, ydir) {
@@ -920,8 +1117,8 @@ class Player {
         }
         
         // Constrain to canvas
-        this.x = constrain(this.x, 0, width - 60);
-        this.y = constrain(this.y, 0, height - 60);
+        this.x = constrain(this.x, 0, width - this.size);
+        this.y = constrain(this.y, 0, height - this.size);
     }
 }
 
@@ -930,7 +1127,8 @@ class Bullet {
     constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.r = 8;
+        this.r = 8 * scaleFactor; // Scale radius
+        this.speed = 5 * scaleFactor; // Scale speed
         this.active = true;
     }
 
@@ -946,7 +1144,7 @@ class Bullet {
     }
 
     move() {
-        this.y = this.y - 5;
+        this.y = this.y - this.speed;
     }
 
     hits(alien) {
@@ -954,8 +1152,8 @@ class Bullet {
         if (!this.active) return false;
         
         // Use square distance for better performance (avoid sqrt)
-        const dx = this.x - (alien.x + 30);
-        const dy = this.y - (alien.y + 30);
+        const dx = this.x - (alien.x + alien.size / 2);
+        const dy = this.y - (alien.y + alien.size / 2);
         const distSquared = dx*dx + dy*dy;
         const radiusSum = this.r + alien.r;
         
@@ -967,24 +1165,24 @@ class BulletBox {
     constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.width = 40;
-        this.height = 40;
+        this.width = 40 * scaleFactor; // Scale width
+        this.height = 40 * scaleFactor; // Scale height
     }
     
     show() {
         fill(255, 165, 0); // Orange color
         stroke(0);
-        strokeWeight(2);
+        strokeWeight(2 * scaleFactor); // Scale stroke weight
         rect(this.x, this.y, this.width, this.height);
         
         // Draw bullet icon
         fill(50, 205, 50); // Green color for bullet
         noStroke();
-        ellipse(this.x + this.width/2, this.y + this.height/2, 20, 20);
+        ellipse(this.x + this.width/2, this.y + this.height/2, 20 * scaleFactor);
         
         // Draw +7 text
         fill(255);
-        textSize(12);
+        textSize(12 * scaleFactor); // Scale text size
         textAlign(CENTER, CENTER);
         text("+7", this.x + this.width/2, this.y + this.height/2);
     }
@@ -992,9 +1190,9 @@ class BulletBox {
     hits(player) {
         // Check if the player overlaps with this bullet box
         return (
-            this.x < player.x + 60 &&
+            this.x < player.x + player.size &&
             this.x + this.width > player.x &&
-            this.y < player.y + 60 &&
+            this.y < player.y + player.size &&
             this.y + this.height > player.y
         );
     }
@@ -1004,12 +1202,13 @@ class Alien {
     constructor(x, y, speedMultiplier) {
         this.x = x;
         this.y = y;
-        this.r = 30;
-        this.xdir = 1 * -speedMultiplier;
+        this.r = 30 * scaleFactor; // Scale radius
+        this.size = 60 * scaleFactor; // Scale size
+        this.xdir = 1 * -speedMultiplier * scaleFactor; // Scale speed
     }
 
     show() {
-        image(alienImage, this.x, this.y, 60, 60);
+        image(alienImage, this.x, this.y, this.size, this.size);
     }
 
     move() {
@@ -1021,16 +1220,17 @@ class Alien {
     }
 
     hits(player) {
-        let d = dist(this.x + 30, this.y + 30, player.x + 30, player.y + 30);
-        return d < 30 + 30;
+        let d = dist(this.x + this.size / 2, this.y + this.size / 2, 
+                     player.x + player.size / 2, player.y + player.size / 2);
+        return d < this.r + player.size / 2;
     }
 }
 
 class FastAlien extends Alien {
     constructor(x, y, speedMultiplier) {
         super(x, y, speedMultiplier);
-        this.xdir = 5 * speedMultiplier;
-        this.ydir = 1 * speedMultiplier;
+        this.xdir = 5 * speedMultiplier * scaleFactor; // Scale speed
+        this.ydir = 1 * speedMultiplier * scaleFactor; // Scale speed
     }
 }
 
@@ -1038,16 +1238,17 @@ class FastAlien extends Alien {
 class ShooterAlien extends Alien {
     constructor(x, y, speedMultiplier) {
         super(x, y, speedMultiplier);
-        this.xdir = 2 * speedMultiplier; // Slower than fast aliens but faster than regular aliens
+        this.xdir = 2 * speedMultiplier * scaleFactor; // Scale speed
     }
     
     show() {
         // Draw the regular alien
-        image(alienImage, this.x, this.y, 60, 60);
+        image(alienImage, this.x, this.y, this.size, this.size);
         
         // Add simple gun indicator (just a rectangle)
         fill(255, 0, 0);
-        rect(this.x + 25, this.y + 60, 10, 15);
+        rect(this.x + this.size * 0.42, this.y + this.size, 
+             10 * scaleFactor, 15 * scaleFactor);
     }
 }
 
@@ -1056,7 +1257,8 @@ class EnemyBullet {
     constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.r = 8;
+        this.r = 8 * scaleFactor; // Scale radius
+        this.speed = 7 * scaleFactor; // Scale speed
         this.active = true;
     }
     
@@ -1072,7 +1274,7 @@ class EnemyBullet {
     }
 
     move() {
-        this.y = this.y + 7; // Moves downward
+        this.y = this.y + this.speed;
     }
 
     hits(player) {
@@ -1080,10 +1282,10 @@ class EnemyBullet {
         if (!this.active) return false;
         
         // Use square distance for better performance
-        const dx = this.x - (player.x + 30);
-        const dy = this.y - (player.y + 30);
+        const dx = this.x - (player.x + player.size / 2);
+        const dy = this.y - (player.y + player.size / 2);
         const distSquared = dx*dx + dy*dy;
-        const radiusSum = this.r + 30; // 30 is player radius
+        const radiusSum = this.r + player.size / 2;
         
         return distSquared < radiusSum * radiusSum;
     }
