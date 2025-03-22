@@ -369,6 +369,9 @@ p {
   grid-column: 1; /* Place in first column */
   justify-self: start; /* Align to start (left) of grid cell */
   margin-left: 20px; /* Add some margin from the left edge */
+  /* Add subtle inner gradient */
+  background-image: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(0,0,0,0.2) 100%);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4), inset 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .joystick-knob {
@@ -381,8 +384,14 @@ p {
   left: 50%; /* Position in center */
   transform: translate(-50%, -50%); /* Center the knob properly */
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+  /* Add subtle gradient */
+  background-image: radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.5) 100%);
+  /* Enhance shadow for 3D effect */
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5), inset 0 -2px 3px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
+/* Enhanced fire button with better visual feedback */
 .fire-button {
   width: 100px;
   height: 100px;
@@ -394,14 +403,74 @@ p {
   color: white;
   font-weight: bold;
   font-size: 1rem;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-  pointer-events: auto; /* Enable pointer events for this element */
+  box-shadow: 0 6px 8px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
   user-select: none;
-  touch-action: none; /* Prevent browser handling of touch events */
-  transition: transform 0.1s, background-color 0.1s;
-  grid-column: 5; /* Place in last column */
-  justify-self: end; /* Align to end (right) of grid cell */
-  margin-right: 20px; /* Add some margin from the right edge */
+  touch-action: none;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+  grid-column: 5;
+  justify-self: end;
+  margin-right: 20px;
+  position: relative;
+  /* Add subtle inner gradient */
+  background-image: linear-gradient(to bottom, rgba(255,255,255,0.1) 0%, rgba(0,0,0,0.1) 100%);
+  /* Add text shadow for readability */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  /* Border for better visual definition */
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  /* Add inset shadow for 3D effect */
+  box-shadow: 0 6px 10px rgba(0, 0, 0, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.3);
+}
+
+/* Fire button hover state */
+.fire-button:hover {
+  background-color: #f55549;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 12px rgba(0, 0, 0, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.3);
+}
+
+/* Fire button active/pressed state */
+.fire-button.active {
+  transform: translateY(4px) scale(0.95);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5), inset 0 1px 8px rgba(0, 0, 0, 0.4);
+  background-color: #d32f2f;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.7);
+}
+
+/* Add a pressed indicator circle in the button */
+.fire-button:before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 70%;
+  height: 70%;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: transparent;
+  transition: background-color 0.12s ease;
+  z-index: -1;
+}
+
+.fire-button.active:before {
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Add pulsing effect for the fire button */
+@keyframes fire-pulse {
+  0% {
+    box-shadow: 0 6px 10px rgba(0, 0, 0, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  }
+  50% {
+    box-shadow: 0 6px 15px rgba(244, 67, 54, 0.4), inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  }
+  100% {
+    box-shadow: 0 6px 10px rgba(0, 0, 0, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  }
+}
+
+.fire-button:not(.active) {
+  animation: fire-pulse 2s infinite;
 }
 
 /* Show controls on both touch and non-touch devices */
@@ -514,6 +583,13 @@ p {
         height: 80px;
         font-size: 0.8rem;
         margin-right: 10px; /* Less margin on smaller screens */
+        /* Adjusted box-shadow for smaller screens */
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.3);
+    }
+    
+    .fire-button.active {
+        transform: translateY(3px) scale(0.95);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), inset 0 1px 6px rgba(0, 0, 0, 0.4);
     }
     
     .touch-controls {
@@ -641,6 +717,12 @@ p {
         height: 70px;
         font-size: 0.7rem;
         margin-right: 5px; /* Even less margin on very small screens */
+        box-shadow: 0 3px 6px rgba(0, 0, 0, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.3);
+    }
+    
+    .fire-button.active {
+        transform: translateY(3px) scale(0.95);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 1px 4px rgba(0, 0, 0, 0.4);
     }
     
     .touch-controls {

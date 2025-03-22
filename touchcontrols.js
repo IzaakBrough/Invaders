@@ -41,6 +41,12 @@ class TouchControls {
         this.touchCheckInterval = null;
         this.lastTouchTime = 0;
         
+        // Add touch state tracking
+        this.isFiring = false;
+        
+        // Add button reset timer
+        this.buttonResetTimer = null;
+        
         console.log("Touch/mouse controls initialized");
     }
     
@@ -330,11 +336,18 @@ class TouchControls {
         e.preventDefault();
         this.lastTouchTime = Date.now();
         
+        // Clear any existing button reset timer
+        if (this.buttonResetTimer) {
+            clearTimeout(this.buttonResetTimer);
+            this.buttonResetTimer = null;
+        }
+        
         // Only start if we're not already tracking a fire touch
         if (this.fireTouchID === null) {
             const touch = e.touches[0];
             this.fireTouchID = touch.identifier;
             this.fireButtonActive = true;
+            this.isFiring = true;
             
             // Track this touch
             this.activeTouches.set(this.fireTouchID, {
@@ -369,18 +382,7 @@ class TouchControls {
         
         // If not found, fire touch has ended
         if (!touchFound) {
-            // Remove from active touches
-            this.activeTouches.delete(this.fireTouchID);
-            
-            this.fireTouchID = null;
-            this.fireButtonActive = false;
-            this.fireButton.classList.remove('active');
-            
-            // Stop continuous firing
-            if (this.fireInterval) {
-                clearInterval(this.fireInterval);
-                this.fireInterval = null;
-            }
+            this.releaseFireButton();
         }
     }
     
@@ -388,6 +390,14 @@ class TouchControls {
     handleFireMouseStart(e) {
         e.preventDefault();
         
+        // Clear any existing button reset timer
+        if (this.buttonResetTimer) {
+            clearTimeout(this.buttonResetTimer);
+            this.buttonResetTimer = null;
+        }
+        
+        this.fireButtonActive = true;
+        this.isFiring = true;
         this.fireButton.classList.add('active');
         this.fire();
         
@@ -396,7 +406,14 @@ class TouchControls {
     }
     
     handleFireMouseEnd(e) {
-        this.fireButton.classList.remove('active');
+        this.fireButtonActive = false;
+        this.isFiring = false;
+        
+        // Use a short delay to reset the button to avoid visual glitches
+        if (this.buttonResetTimer) clearTimeout(this.buttonResetTimer);
+        this.buttonResetTimer = setTimeout(() => {
+            this.fireButton.classList.remove('active');
+        }, 50);
         
         // Stop continuous firing
         if (this.fireInterval) {
@@ -478,6 +495,7 @@ class TouchControls {
             console.log("Fire button appears stuck - forcing release");
             this.fireTouchID = null;
             this.fireButtonActive = false;
+            this.isFiring = false; // Reset firing state
             this.fireButton.classList.remove('active');
             
             // Stop continuous firing
@@ -488,22 +506,37 @@ class TouchControls {
         }
     }
     
-    // New global touch cancel handler
-    handleGlobalTouchCancel(e) {
-        console.log("Global touch cancel event received");
-        // Reset all touch tracking
-        this.activeTouches.clear();
+    // New helper method to centralize fire button release logic
+    releaseFireButton() {
+        // Remove from active touches
+        this.activeTouches.delete(this.fireTouchID);
         
-        // Reset fire button
         this.fireTouchID = null;
         this.fireButtonActive = false;
-        this.fireButton.classList.remove('active');
+        this.isFiring = false;
+        
+        // Use a short delay to reset the button to avoid visual glitches
+        // from rapid touch events
+        if (this.buttonResetTimer) clearTimeout(this.buttonResetTimer);
+        this.buttonResetTimer = setTimeout(() => {
+            this.fireButton.classList.remove('active');
+        }, 50);
         
         // Stop continuous firing
         if (this.fireInterval) {
             clearInterval(this.fireInterval);
             this.fireInterval = null;
         }
+    }
+    
+    // Enhanced global touch cancel handler
+    handleGlobalTouchCancel(e) {
+        console.log("Global touch cancel event received");
+        // Reset all touch tracking
+        this.activeTouches.clear();
+        
+        // Reset fire button with the enhanced method
+        this.releaseFireButton();
         
         // Reset joystick
         this.joystickTouchID = null;
@@ -528,6 +561,16 @@ class TouchControls {
             clearInterval(this.touchCheckInterval);
             this.touchCheckInterval = null;
         }
+        
+        // Clear button reset timer
+        if (this.buttonResetTimer) {
+            clearTimeout(this.buttonResetTimer);
+            this.buttonResetTimer = null;
+        }
+        
+        // Ensure button state is reset
+        this.fireButton.classList.remove('active');
+        this.isFiring = false;
         
         // Reset state
         this.activeTouches.clear();
